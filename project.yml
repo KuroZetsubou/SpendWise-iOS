@@ -1,0 +1,97 @@
+name: SpendWise
+options:
+  bundleIdPrefix: com.spendwise
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+  xcodeVersion: "15.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+targets:
+  SpendWise:
+    type: application
+    platform: [iOS, macOS]
+    sources:
+      - path: SpendWise
+        excludes:
+          - "**/*.md"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kurozetsubou.spendwise
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: 5.9
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: SpendWise/Info.plist
+        ENABLE_HARDENED_RUNTIME: YES
+      configs:
+        Debug:
+          DEBUG_INFORMATION_FORMAT: dwarf
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+        Release:
+          DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+          SWIFT_OPTIMIZATION_LEVEL: "-Owholemodule"
+    dependencies:
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseAuth
+      - package: Firebase
+        product: FirebaseFirestore
+      - package: GoogleSignIn
+        product: GoogleSignIn
+    entitlements:
+      path: SpendWise/SpendWise.entitlements
+      properties:
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)com.kurozetsubou.spendwise
+        com.apple.security.application-groups: []
+    info:
+      path: SpendWise/Info.plist
+      properties:
+        CFBundleDisplayName: SpendWise
+        CFBundleName: SpendWise
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        UILaunchScreen:
+          UIColorName: ""
+          UIImageName: ""
+        # iOS URL Scheme for Google Sign-In & bank OAuth
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.kurozetsubou.spendwise
+            CFBundleURLSchemes:
+              - spendwise
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.googleusercontent.apps
+            CFBundleURLSchemes:
+              - com.googleusercontent.apps.825087687810-dvdi0dketd4of0mlggum4dq37evgu394
+        # Google Sign-In Client ID (set via xcconfig or environment)
+        GIDClientID: $(GID_CLIENT_ID)
+        # Required for background fetch
+        UIBackgroundModes:
+          - fetch
+          - remote-notification
+        # NSAppTransportSecurity - allow localhost for dev
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+              NSIncludesSubdomains: true
+        # Privacy descriptions
+        NSCameraUsageDescription: "Utilizzata per scansionare gli scontrini con l'AI."
+        NSPhotoLibraryUsageDescription: "Utilizzata per selezionare immagini di scontrini."
+        # macOS specific
+        LSMinimumSystemVersion: "14.0"
+        NSHumanReadableCopyright: "© 2024 SpendWise"
+
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 11.0.0
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: 8.0.0
