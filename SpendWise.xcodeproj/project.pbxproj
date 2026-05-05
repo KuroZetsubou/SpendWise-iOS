@@ -21,6 +21,7 @@
 		3165C620FA0D4FFB22C0854C /* TransactionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC04B02D3C66F3EFC851FE73 /* TransactionDetailView.swift */; };
 		3892603E30FA7204AF607A24 /* FirestoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60EEE4E5F552EAC9CD528049 /* FirestoreService.swift */; };
 		3A596379E2C05514CFFDCF9A /* BankConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91C9736DEC8D3013D5F26B51 /* BankConnectView.swift */; };
+		41AF5F01C6780D3061CA2A56 /* AuthCallbackHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86206C9BD7F62243DD73D0E6 /* AuthCallbackHandler.swift */; };
 		42C14AEAFAAD8A54F607AF3C /* RecurringsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB5E0302975BAABFB6E8F69 /* RecurringsView.swift */; };
 		42D4512EF5FCC3DD670A291A /* CategoryManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED446D2B3C83262610D14F45 /* CategoryManagerView.swift */; };
 		42DBDE3C370A28931A0846BB /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 95631E683D637AB23B73BD1C /* FirebaseCore */; };
@@ -66,9 +67,12 @@
 		B31272321318F5960451E385 /* BankSessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE887C47735DFC1507A49712 /* BankSessionDetailView.swift */; };
 		B7A86BF13B9E993F46F0E9A5 /* BankAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DA5E51DD5E3CE47F7C50F79 /* BankAccount.swift */; };
 		B9A852BACC65D33D662619A9 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 74C9A1B7C5CDD7AB5A1F953B /* FirebaseFirestore */; };
+		BB7FF8DA71FDCD5B4AC17DB6 /* AuthCallbackHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86206C9BD7F62243DD73D0E6 /* AuthCallbackHandler.swift */; };
 		BDAD3DB157EBB8971C3B9E6D /* EnableBankingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4708D81855695F4F50123C48 /* EnableBankingService.swift */; };
+		BFF235B327A6B1AEA3755EB9 /* TransactionSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D869A7FA3D4396585E8FC263 /* TransactionSyncService.swift */; };
 		C342F87378D0586342101B5D /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEBB86DE022AD4B70640B7C6 /* Constants.swift */; };
 		C45653783D33FC712244A9C0 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 5889CAAC322E95082E627D87 /* GoogleSignIn */; };
+		C4920A3A2D109A27FE9DA4E4 /* TransactionSyncService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D869A7FA3D4396585E8FC263 /* TransactionSyncService.swift */; };
 		C73F586B5882CC58122EAE86 /* TransactionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC131040AE55BCF63558861 /* TransactionRowView.swift */; };
 		CCA988A5FAFD5ACEB45F88A7 /* BankAccountDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D40037F0B5ED3BDAF1B642 /* BankAccountDetailView.swift */; };
 		D186C9D27AEACE7A6FB00055 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C160F29773809EDED40ACD00 /* DashboardView.swift */; };
@@ -107,9 +111,10 @@
 		79609B006AE6A4E5982F57D4 /* DashboardViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardViewModel.swift; sourceTree = "<group>"; };
 		7E9F7BE7622A81CCF5294976 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
 		827FF9D3B50DBCC4A392E6BE /* AppCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCategory.swift; sourceTree = "<group>"; };
+		86206C9BD7F62243DD73D0E6 /* AuthCallbackHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthCallbackHandler.swift; sourceTree = "<group>"; };
 		8CB5E0302975BAABFB6E8F69 /* RecurringsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringsView.swift; sourceTree = "<group>"; };
 		91C9736DEC8D3013D5F26B51 /* BankConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankConnectView.swift; sourceTree = "<group>"; };
-		9D27C13E5F20EBB81CBFE787 /* SpendWise.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpendWise.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9D27C13E5F20EBB81CBFE787 /* SpendWise.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SpendWise.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0513B94913AFBFF297A7F90 /* CategorizationMemoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategorizationMemoryStore.swift; sourceTree = "<group>"; };
 		BCA468EA617DB1F9732CD3A2 /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
 		BEBB86DE022AD4B70640B7C6 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
@@ -122,6 +127,7 @@
 		D0C25E5CFECA71856393A9AA /* SpendWise.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SpendWise.entitlements; sourceTree = "<group>"; };
 		D1D40037F0B5ED3BDAF1B642 /* BankAccountDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAccountDetailView.swift; sourceTree = "<group>"; };
 		D76F2E8DE607EF30CF08B414 /* BankAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAPIService.swift; sourceTree = "<group>"; };
+		D869A7FA3D4396585E8FC263 /* TransactionSyncService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionSyncService.swift; sourceTree = "<group>"; };
 		DE887C47735DFC1507A49712 /* BankSessionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankSessionDetailView.swift; sourceTree = "<group>"; };
 		E04C4117C178596B46A4BAC1 /* SpendWiseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendWiseApp.swift; sourceTree = "<group>"; };
 		E9BCDA84E707D68B19CB31B0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -298,10 +304,12 @@
 			isa = PBXGroup;
 			children = (
 				BCA468EA617DB1F9732CD3A2 /* AIService.swift */,
+				86206C9BD7F62243DD73D0E6 /* AuthCallbackHandler.swift */,
 				C964F3DF72425C4CCFC4E314 /* AuthService.swift */,
 				D76F2E8DE607EF30CF08B414 /* BankAPIService.swift */,
 				4708D81855695F4F50123C48 /* EnableBankingService.swift */,
 				60EEE4E5F552EAC9CD528049 /* FirestoreService.swift */,
+				D869A7FA3D4396585E8FC263 /* TransactionSyncService.swift */,
 				59C1E067E35EF8780C78EB8B /* Categorization */,
 			);
 			path = Services;
@@ -395,6 +403,7 @@
 						ProvisioningStyle = Automatic;
 					};
 					D5C2243A4A78E8007D7D7854 = {
+						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -452,6 +461,7 @@
 				FE513D30A337299630946FC2 /* AddRecurringView.swift in Sources */,
 				69F2FF2C710D1616FBCBFB46 /* AddTransactionView.swift in Sources */,
 				93C969718AB35553FA57C26D /* AppCategory.swift in Sources */,
+				BB7FF8DA71FDCD5B4AC17DB6 /* AuthCallbackHandler.swift in Sources */,
 				E0A8805DCE6CFF18FF0BC076 /* AuthService.swift in Sources */,
 				6CF30EE555F12137430FBED8 /* AuthViewModel.swift in Sources */,
 				A79BA82D9C64A7E810AC0987 /* BankAPIService.swift in Sources */,
@@ -481,6 +491,7 @@
 				116B29AD266899A06D054E3D /* TransactionDetailView.swift in Sources */,
 				585FDA19210ABFD1B969F2BC /* TransactionNormalizer.swift in Sources */,
 				30FC7F24C43BFF6837BBBAA4 /* TransactionRowView.swift in Sources */,
+				BFF235B327A6B1AEA3755EB9 /* TransactionSyncService.swift in Sources */,
 				520B1F4F56F495DCD79C1AC9 /* TransactionsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -494,6 +505,7 @@
 				538AFAB04C79695562CC9A21 /* AddRecurringView.swift in Sources */,
 				1C6E97129119DD131174D284 /* AddTransactionView.swift in Sources */,
 				E3422155DE31CC7EDEDB1B34 /* AppCategory.swift in Sources */,
+				41AF5F01C6780D3061CA2A56 /* AuthCallbackHandler.swift in Sources */,
 				A1B08FE258DE1F278C213EB1 /* AuthService.swift in Sources */,
 				966DE51437425C671BDDCCBE /* AuthViewModel.swift in Sources */,
 				F1A88F68729EB3D78601FC49 /* BankAPIService.swift in Sources */,
@@ -523,6 +535,7 @@
 				3165C620FA0D4FFB22C0854C /* TransactionDetailView.swift in Sources */,
 				A9849BD23B32E08D851F0095 /* TransactionNormalizer.swift in Sources */,
 				C73F586B5882CC58122EAE86 /* TransactionRowView.swift in Sources */,
+				C4920A3A2D109A27FE9DA4E4 /* TransactionSyncService.swift in Sources */,
 				FB5624B2A664172539A14928 /* TransactionsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -652,7 +665,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 72K2VK8SK2;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = SpendWise/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -734,7 +747,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 72K2VK8SK2;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = SpendWise/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

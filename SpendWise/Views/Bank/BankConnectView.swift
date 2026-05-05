@@ -1,6 +1,5 @@
 import SwiftUI
 import FirebaseFirestore
-import AuthenticationServices
 
 struct BankConnectView: View {
     @ObservedObject var viewModel: DashboardViewModel
@@ -11,6 +10,9 @@ struct BankConnectView: View {
     @State private var showInstitutionPicker = false
     @State private var selectedCountry = "IT"
     @State private var searchInstitution = ""
+    @State private var showSyncResult = false
+    @State private var lastSyncResult: TransactionSyncService.SyncResult?
+    @State private var syncDays = 30
 
     private let bankService = BankAPIService.shared
     private let firestoreService = FirestoreService.shared
@@ -41,8 +43,91 @@ struct BankConnectView: View {
                 if !viewModel.bankSessions.isEmpty {
                     Section("Banche collegate") {
                         ForEach(viewModel.bankSessions) { session in
-                            NavigationLink(value: session) {
+                            let isExpired = ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
+                            if isExpired {
                                 bankSessionRow(session)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        Button {
+                                            Task { await reconnectSession(session) }
+                                        } label: {
+                                            Label("Riconnetti", systemImage: "arrow.clockwise.circle.fill")
+                                                .font(.caption.bold())
+                                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                                .background(Color.orange)
+                                                .foregroundStyle(.white)
+                                                .clipShape(Capsule())
+                                        }
+                                        .offset(y: 4)
+                                    }
+                            } else {
+                                NavigationLink(value: session) {
+                                    bankSessionRow(session)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Sync Transactions ────────────────────────────────
+                if !viewModel.bankSessions.isEmpty {
+                    Section("Sincronizza transazioni") {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundStyle(Color.appPrimary)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Importa transazioni bancarie")
+                                    .font(.subheadline)
+                                Text("Scarica le transazioni dagli ultimi \(syncDays) giorni")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            if viewModel.isSyncingTransactions {
+                                ProgressView()
+                            }
+                        }
+
+                        Picker("Periodo", selection: $syncDays) {
+                            Text("7 giorni").tag(7)
+                            Text("30 giorni").tag(30)
+                            Text("90 giorni").tag(90)
+                            Text("180 giorni").tag(180)
+                            Text("1 anno").tag(365)
+                        }
+                        .pickerStyle(.menu)
+
+                        Button {
+                            Task {
+                                lastSyncResult = await viewModel.syncBankTransactions(days: syncDays)
+                                showSyncResult = true
+                            }
+                        } label: {
+                            HStack {
+                                Spacer()
+                                Label("Sincronizza ora", systemImage: "arrow.down.circle.fill")
+                                    .font(.subheadline.bold())
+                                Spacer()
+                            }
+                        }
+                        .disabled(viewModel.isSyncingTransactions)
+
+                        if viewModel.isSyncingTransactions, let progress = viewModel.syncProgress {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Conto: \(progress.currentAccount)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                HStack {
+                                    Text("Account \(progress.accountIndex + 1)/\(progress.totalAccounts)")
+                                    Spacer()
+                                    Text("\(progress.transactionsImported) importate")
+                                }
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                if progress.totalAccounts > 0 {
+                                    ProgressView(value: Double(progress.accountIndex), total: Double(progress.totalAccounts))
+                                        .tint(Color.appPrimary)
+                                }
                             }
                         }
                     }
@@ -82,6 +167,18 @@ struct BankConnectView: View {
             .sheet(isPresented: $showInstitutionPicker) {
                 institutionPickerSheet
             }
+            .alert("Sincronizzazione completata", isPresented: $showSyncResult) {
+                Button("OK") {}
+            } message: {
+                if let r = lastSyncResult {
+                    let msg = "\(r.imported) transazioni importate da \(r.accountsProcessed) conti."
+                    if r.errors.isEmpty {
+                        Text(msg)
+                    } else {
+                        Text("\(msg)\n\nErrori: \(r.errors.joined(separator: ", "))")
+                    }
+                }
+            }
             .onAppear {
                 Task {
                     await loadInstitutions()
@@ -106,13 +203,14 @@ struct BankConnectView: View {
     private func bankSessionRow(_ session: BankSession) -> some View {
         let accountsForSession = viewModel.resolvedBankAccounts.filter { $0.sessionId == session.sessionId }
         let totalBalance = accountsForSession.reduce(0) { $0 + $1.currentBalance }
+        let isExpired = ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
 
         return HStack(spacing: 12) {
-            Image(systemName: "building.columns.fill")
+            Image(systemName: isExpired ? "exclamationmark.triangle.fill" : "building.columns.fill")
                 .font(.title2)
-                .foregroundStyle(Color.appPrimary)
+                .foregroundStyle(isExpired ? .orange : Color.appPrimary)
                 .frame(width: 44, height: 44)
-                .background(Color.appPrimary.opacity(0.1))
+                .background((isExpired ? Color.orange : Color.appPrimary).opacity(0.1))
                 .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 3) {
@@ -122,7 +220,14 @@ struct BankConnectView: View {
                     Text("\(accountsForSession.count) conti")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    if let status = session.status {
+                    if isExpired {
+                        Text("Scaduta — Riconnetti")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Color.orange.opacity(0.15))
+                            .foregroundStyle(Color.orange)
+                            .clipShape(Capsule())
+                    } else if let status = session.status {
                         Text(status == "AUTHORIZED" ? "Attiva" : status)
                             .font(.caption2)
                             .padding(.horizontal, 6).padding(.vertical, 1)
@@ -131,20 +236,28 @@ struct BankConnectView: View {
                             .clipShape(Capsule())
                     }
                 }
+                if isExpired {
+                    Text("Tocca 'Riconnetti' per rinnovare l'accesso")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Spacer()
 
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(totalBalance.euroFormatted)
-                    .font(.subheadline.bold())
-                    .foregroundStyle(totalBalance >= 0 ? Color.income : Color.expense)
-                Text("totale")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+            if !isExpired {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(totalBalance.euroFormatted)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(totalBalance >= 0 ? Color.income : Color.expense)
+                    Text("totale")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(.vertical, 4)
+        .opacity(isExpired ? 0.8 : 1.0)
     }
 
     // MARK: - Connect Bank Content
@@ -276,37 +389,10 @@ struct BankConnectView: View {
         isConnecting = true
         errorMessage = nil
         do {
-            let redirectURL = "https://KuroZetsubou.github.io/spendwise-callback/"
-            let authURL = try await bankService.initiateLink(
-                aspspName: institution.name,
-                country: selectedCountry,
-                redirectURL: redirectURL
-            )
-            guard let url = URL(string: authURL) else {
-                throw URLError(.badURL)
-            }
-            let callbackURL = try await startWebAuthSession(url: url, callbackScheme: "spendwise")
-
-            guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
-                  let code = components.queryItems?.first(where: { $0.name == "code" })?.value
-            else {
-                throw EBError.invalidResponse("Missing auth code in callback URL: \(callbackURL)")
-            }
-
+            let code = try await startBankAuth(aspspName: institution.name, country: selectedCountry)
             guard let userId = viewModel.userId else { return }
-            let session = try await bankService.exchangeCode(code)
-            let sessionData: [String: Any] = [
-                "accessToken": session.access_token ?? "",
-                "sessionId": session.session_id ?? "",
-                "aspsp": ["name": institution.name, "country": selectedCountry],
-                "description": "Connection to \(institution.displayName)",
-                "status": "AUTHORIZED",
-                "createdAt": ISO8601DateFormatter().string(from: Date())
-            ]
-            try await firestoreService.saveBankSession(userId: userId, session: sessionData)
-            await viewModel.refreshBankSessions()
-            await syncBankAccounts()
-        } catch ASWebAuthenticationSessionError.canceledLogin {
+            try await finishBankAuth(code: code, aspspName: institution.name, country: selectedCountry, userId: userId)
+        } catch is CancellationError {
             errorMessage = nil
         } catch {
             errorMessage = "Errore connessione: \(error.localizedDescription)"
@@ -314,48 +400,70 @@ struct BankConnectView: View {
         isConnecting = false
     }
 
-    @MainActor
-    private func startWebAuthSession(url: URL, callbackScheme: String) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            #if os(iOS)
-            let context = WebAuthPresentationContext()
-            #endif
-
-            let session = ASWebAuthenticationSession(
-                url: url,
-                callbackURLScheme: callbackScheme
-            ) { callbackURL, error in
-                #if os(iOS)
-                _ = context
-                #endif
-                if let error { continuation.resume(throwing: error); return }
-                guard let callbackURL else {
-                    continuation.resume(throwing: EBError.invalidResponse("No callback URL"))
-                    return
-                }
-                continuation.resume(returning: callbackURL)
+    private func reconnectSession(_ session: BankSession) async {
+        guard let aspspName = session.displayInstitutionName,
+              let userId = viewModel.userId else { return }
+        isConnecting = true
+        errorMessage = nil
+        do {
+            let country = session.aspsp?.country ?? "IT"
+            let code = try await startBankAuth(aspspName: aspspName, country: country)
+            // Delete old expired session
+            if let oldSessionId = session.sessionId {
+                try? await firestoreService.deleteBankSession(userId: userId, sessionId: oldSessionId)
             }
-            session.prefersEphemeralWebBrowserSession = false
-            #if os(iOS)
-            session.presentationContextProvider = context
-            #endif
-            session.start()
+            try await finishBankAuth(code: code, aspspName: aspspName, country: country, userId: userId)
+        } catch is CancellationError {
+            errorMessage = nil
+        } catch {
+            errorMessage = "Errore riconnessione: \(error.localizedDescription)"
         }
+        isConnecting = false
+    }
+
+    /// Opens the Enable Banking OAuth page in **external Safari** (avoids bank popup blocks).
+    /// Returns the auth code once the user completes the flow and is redirected back.
+    private func startBankAuth(aspspName: String, country: String) async throws -> String {
+        // Use spendwise://callback as redirect — iOS intercepts it and calls onOpenURL
+        let redirectURL = "spendwise://callback"
+        let authURL = try await bankService.initiateLink(
+            aspspName: aspspName,
+            country: country,
+            redirectURL: redirectURL
+        )
+        guard let url = URL(string: authURL) else { throw URLError(.badURL) }
+
+        // Open in external Safari (works with banks that block in-app browsers)
+        await UIApplication.shared.open(url)
+
+        // Wait for spendwise://callback?code=... from AuthCallbackHandler
+        return try await AuthCallbackHandler.shared.waitForCode(timeout: 300)
+    }
+
+    private func finishBankAuth(code: String, aspspName: String, country: String, userId: String) async throws {
+        let session = try await bankService.exchangeCode(code)
+        let accountsData: [[String: Any]] = session.accounts?.compactMap { acc -> [String: Any]? in
+            guard let uid = acc.uid else { return nil }
+            var entry: [String: Any] = ["uid": uid, "currency": acc.currency ?? "EUR",
+                                        "cash_account_type": acc.cash_account_type ?? ""]
+            if let name = acc.name { entry["name"] = name }
+            if let iban = acc.account_id?.iban { entry["account_id"] = ["iban": iban] }
+            return entry
+        } ?? []
+        let sessionData: [String: Any] = [
+            "accessToken": session.access_token as Any,
+            "accounts": accountsData,
+            "sessionId": session.session_id ?? "",
+            "aspsp": ["name": aspspName, "country": country],
+            "description": "Connection to \(aspspName)",
+            "status": "AUTHORIZED",
+            "createdAt": ISO8601DateFormatter().string(from: Date())
+        ]
+        try await firestoreService.saveBankSession(userId: userId, session: sessionData)
+        await viewModel.refreshBankSessions()
+        await syncBankAccounts()
     }
 }
-
-// MARK: - ASWebAuthenticationSession presentation context
-
-#if os(iOS)
-private final class WebAuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow } ?? ASPresentationAnchor()
-    }
-}
-#endif
 
 extension BankConnectView {
     func syncBankAccounts() async {
@@ -365,10 +473,36 @@ extension BankConnectView {
         do {
             let sessions = try await firestoreService.getBankSessions(userId: userId)
             for session in sessions {
-                guard let token = session["accessToken"] as? String, !token.isEmpty else { continue }
-                let ebAccounts = try await bankService.getAccounts(sessionToken: token)
+                let token = session["accessToken"] as? String
+                let effectiveToken: String? = (token != nil && !token!.isEmpty) ? token : nil
                 let sessionId = session["sessionId"] as? String
                 let aspspName = (session["aspsp"] as? [String: Any])?["name"] as? String
+
+                // Get accounts: prefer stored in session, fallback to API
+                var ebAccounts: [EBAccount] = []
+                if let sessionAccounts = session["accounts"] as? [[String: Any]] {
+                    // Decode accounts from session doc
+                    for acc in sessionAccounts {
+                        let uid = acc["uid"] as? String
+                        let iban = (acc["account_id"] as? [String: Any])?["iban"] as? String
+                        let name = acc["name"] as? String
+                        let currency = acc["currency"] as? String
+                        let cashType = acc["cash_account_type"] as? String
+                        if let uid {
+                            ebAccounts.append(EBAccount(
+                                uid: uid,
+                                account_id: iban.map { EBAccount.AccountId(iban: $0) },
+                                name: name,
+                                cash_account_type: cashType,
+                                currency: currency
+                            ))
+                        }
+                    }
+                }
+                if ebAccounts.isEmpty {
+                    ebAccounts = try await bankService.getAccounts(sessionToken: effectiveToken)
+                }
+
                 var bankAccounts: [BankAccount] = ebAccounts.map { eb in
                     let bankBalances = (eb.balances ?? []).map { b in
                         BankBalance(amount: b.amountDouble, currency: b.currency, type: b.balance_type)
@@ -396,7 +530,7 @@ extension BankConnectView {
                     )
                 }
                 for i in bankAccounts.indices {
-                    if let ebBalances = try? await bankService.getBalances(accountId: bankAccounts[i].id, sessionToken: token) {
+                    if let ebBalances = try? await bankService.getBalances(accountId: bankAccounts[i].id, sessionToken: effectiveToken) {
                         bankAccounts[i].balances = ebBalances.map {
                             BankBalance(amount: $0.amountDouble, currency: $0.currency, type: $0.balance_type)
                         }

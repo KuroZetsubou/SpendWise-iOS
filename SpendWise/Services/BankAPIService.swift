@@ -24,7 +24,7 @@ class BankAPIService {
         try await eb.exchangeCode(code)
     }
 
-    func getSessionStatus(sessionId: String) async throws -> Data {
+    func getSessionStatus(sessionId: String) async throws -> EBGetSessionResponse {
         try await eb.getSessionStatus(sessionId: sessionId)
     }
 
@@ -32,17 +32,17 @@ class BankAPIService {
         try await eb.deleteSession(sessionId: sessionId)
     }
 
-    func getAccounts(sessionToken: String) async throws -> [EBAccount] {
+    func getAccounts(sessionToken: String? = nil) async throws -> [EBAccount] {
         try await eb.getAccounts(sessionToken: sessionToken)
     }
 
-    func getBalances(accountId: String, sessionToken: String) async throws -> [EBBalance] {
+    func getBalances(accountId: String, sessionToken: String? = nil) async throws -> [EBBalance] {
         try await eb.getBalances(accountId: accountId, sessionToken: sessionToken)
     }
 
     func getTransactions(
         accountId: String,
-        sessionToken: String,
+        sessionToken: String? = nil,
         dateFrom: String? = nil,
         dateTo: String? = nil,
         continuationKey: String? = nil,

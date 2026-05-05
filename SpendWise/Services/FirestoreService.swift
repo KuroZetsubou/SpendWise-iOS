@@ -216,6 +216,16 @@ class FirestoreService: ObservableObject {
         return snapshot.documents.compactMap { try? $0.data(as: BankSession.self) }
     }
 
+    func updateBankSessionStatus(userId: String, sessionId: String, status: String) async throws {
+        let snapshot = try await db.collection("users").document(userId)
+            .collection("bank_sessions")
+            .whereField("sessionId", isEqualTo: sessionId)
+            .getDocuments()
+        for doc in snapshot.documents {
+            try await doc.reference.updateData(["status": status])
+        }
+    }
+
     func deleteBankSession(userId: String, sessionId: String) async throws {
         let snapshot = try await db.collection("users").document(userId)
             .collection("bank_sessions")

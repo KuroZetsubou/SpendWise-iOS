@@ -30,6 +30,8 @@ class DashboardViewModel: ObservableObject {
 
     @Published var isLoadingInsights = false
     @Published var isLoadingTransactions = false
+    @Published var isSyncingTransactions = false
+    @Published var syncProgress: TransactionSyncService.SyncProgress?
     @Published var errorMessage: String?
     @Published var selectedTab: Tab = .dashboard
 
@@ -330,6 +332,27 @@ class DashboardViewModel: ObservableObject {
         guard let userId = userId else { return }
         do { try await firestoreService.unlinkTransaction(recurringId: recurringId, transactionId: transactionId, userId: userId) }
         catch { errorMessage = error.localizedDescription }
+    }
+
+    // MARK: - Transaction Sync
+
+    func syncBankTransactions(days: Int = 30) async -> TransactionSyncService.SyncResult {
+        guard let userId = userId else {
+            return TransactionSyncService.SyncResult(errors: ["Utente non autenticato"])
+        }
+        isSyncingTransactions = true
+        syncProgress = nil
+
+        let result = await TransactionSyncService.shared.syncAll(
+            userId: userId,
+            days: days
+        ) { [weak self] progress in
+            self?.syncProgress = progress
+        }
+
+        isSyncingTransactions = false
+        syncProgress = nil
+        return result
     }
 
     // MARK: - Actions

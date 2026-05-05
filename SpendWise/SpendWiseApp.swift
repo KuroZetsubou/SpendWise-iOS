@@ -53,6 +53,10 @@ struct URLHandlerModifier: ViewModifier {
     }
 
     private func handleBankCallback(url: URL) {
+        Task { @MainActor in
+            AuthCallbackHandler.shared.receive(url: url)
+        }
+        // Also post notification for legacy listeners
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let code = components.queryItems?.first(where: { $0.name == "code" })?.value else {
             return

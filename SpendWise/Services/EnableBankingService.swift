@@ -63,26 +63,27 @@ final class EnableBankingService {
         return try JSONDecoder().decode(EBSessionResponse.self, from: data)
     }
 
-    func getSessionStatus(sessionId: String) async throws -> Data {
-        return try await get("/sessions/\(sessionId)")
+    func getSessionStatus(sessionId: String) async throws -> EBGetSessionResponse {
+        let data = try await get("/sessions/\(sessionId)")
+        return try JSONDecoder().decode(EBGetSessionResponse.self, from: data)
     }
 
     func deleteSession(sessionId: String) async throws {
         _ = try await delete("/sessions/\(sessionId)")
     }
 
-    func getAccounts(sessionToken: String) async throws -> [EBAccount] {
+    func getAccounts(sessionToken: String? = nil) async throws -> [EBAccount] {
         let data = try await get("/accounts", sessionToken: sessionToken)
         let wrapper = try JSONDecoder().decode(AccountsWrapper.self, from: data)
         return wrapper.accounts
     }
 
-    func getAccountDetails(accountId: String, sessionToken: String) async throws -> EBAccount {
+    func getAccountDetails(accountId: String, sessionToken: String? = nil) async throws -> EBAccount {
         let data = try await get("/accounts/\(accountId)", sessionToken: sessionToken)
         return try JSONDecoder().decode(EBAccount.self, from: data)
     }
 
-    func getBalances(accountId: String, sessionToken: String) async throws -> [EBBalance] {
+    func getBalances(accountId: String, sessionToken: String? = nil) async throws -> [EBBalance] {
         let data = try await get("/accounts/\(accountId)/balances", sessionToken: sessionToken)
         let wrapper = try JSONDecoder().decode(BalancesWrapper.self, from: data)
         return wrapper.balances
@@ -90,7 +91,7 @@ final class EnableBankingService {
 
     func getTransactions(
         accountId: String,
-        sessionToken: String,
+        sessionToken: String? = nil,
         dateFrom: String? = nil,
         dateTo: String? = nil,
         continuationKey: String? = nil,
@@ -405,6 +406,26 @@ struct EBSessionResponse: Codable {
     var access_token: String?
     var session_id: String?
     var accounts: [EBAccount]?
+}
+
+struct EBGetSessionResponse: Codable {
+    var session_id: String?
+    var status: String?         // e.g. "AUTHORIZED", "EXPIRED", "REVOKED"
+    var aspsp: EBAspsp?
+    var valid_until: String?
+    var accounts: [EBAccount]?
+    var expires_at: String?
+
+    struct EBAspsp: Codable {
+        var name: String?
+        var country: String?
+    }
+
+    var isExpired: Bool {
+        guard let status else { return false }
+        let upper = status.uppercased()
+        return upper == "EXPIRED" || upper == "REVOKED" || upper == "UNAUTHORIZED"
+    }
 }
 
 struct EBAccount: Codable, Identifiable {
