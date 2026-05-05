@@ -23,6 +23,7 @@ class DashboardViewModel: ObservableObject {
     @Published var transactions: [Transaction] = []
     @Published var categories: [AppCategory] = []
     @Published var bankAccounts: [BankAccount] = []
+    @Published var bankSessions: [BankSession] = []
     @Published var accountSettings: [String: BankAccountSettings] = [:]
     @Published var insights: [FinancialInsight] = []
     @Published var recurrings: [RecurringPayment] = []
@@ -91,19 +92,80 @@ class DashboardViewModel: ObservableObject {
         firestoreService.subscribeRecurrings(userId: userId) { [weak self] items in
             self?.recurrings = items
         }
+        firestoreService.subscribeBankAccounts(userId: userId) { [weak self] accounts in
+            self?.bankAccounts = accounts
+        }
 
-        Task {
-            await loadBankAccounts(userId: userId)
+        Task { await loadBankSessions(userId: userId) }
+    }
+
+    private func loadBankSessions(userId: String) async {
+        do {
+            bankSessions = try await firestoreService.getBankSessionsTyped(userId: userId)
+        } catch {
+            // Non-fatal
         }
     }
 
-    private func loadBankAccounts(userId: String) async {
-        do {
-            let accounts = try await firestoreService.getBankAccounts(userId: userId)
-            self.bankAccounts = accounts
-        } catch {
-            // Non-fatal — bank accounts are optional
+    func refreshBankSessions() async {
+        guard let userId = userId else { return }
+        await loadBankSessions(userId: userId)
+    }
+
+    // MARK: - Resolved Bank Accounts (merges raw + settings + institution name)
+
+    var resolvedBankAccounts: [BankAccount] {
+        bankAccounts.map { account in
+            var r = account
+            if let s = accountSettings[account.id] {
+                if let cn = s.customName { r.customName = cn }
+                r.isCreditCard = s.isCreditCard
+                r.creditLimit = s.creditLimit
+                r.paymentDay = s.paymentDay
+                r.excludeFromTotal = s.excludeFromTotal
+                r.warningThreshold = s.warningThreshold
+                r.dangerThreshold = s.dangerThreshold
+            }
+            if r.institutionName == nil, let sid = r.sessionId,
+               let session = bankSessions.first(where: { $0.sessionId == sid }) {
+                r.institutionName = session.displayInstitutionName
+            }
+            return r
         }
+    }
+
+    func resolvedBankAccount(for accountId: String) -> BankAccount? {
+        // Primary: match from bank_accounts (with settings + institution overlaid)
+        if let found = resolvedBankAccounts.first(where: { $0.id == accountId }) {
+            return found
+        }
+        // Fallback: build a minimal BankAccount from accountSettings alone
+        // (happens when bank_accounts doc ID differs from accountSettings doc ID)
+        if let s = accountSettings[accountId] {
+            let session = bankSessions.first(where: { _ in true }) // best-effort institution
+            return BankAccount(
+                id: accountId,
+                name: s.customName ?? accountId,
+                officialName: nil,
+                type: s.isCreditCard ? "CACC" : "CACC",
+                subtype: nil,
+                balances: [],
+                institutionId: nil,
+                institutionName: session?.displayInstitutionName,
+                isCreditCard: s.isCreditCard,
+                creditLimit: s.creditLimit,
+                paymentDay: s.paymentDay,
+                excludeFromTotal: s.excludeFromTotal,
+                customName: s.customName,
+                warningThreshold: s.warningThreshold,
+                dangerThreshold: s.dangerThreshold,
+                sessionId: nil,
+                currency: "EUR",
+                calculatedBalance: nil,
+                cashAccountType: s.isCreditCard ? "CACC" : "CACC"
+            )
+        }
+        return nil
     }
 
     // MARK: - Selected Month Navigation

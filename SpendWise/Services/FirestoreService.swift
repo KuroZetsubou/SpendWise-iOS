@@ -11,6 +11,7 @@ class FirestoreService: ObservableObject {
     private var transactionListener: ListenerRegistration?
     private var categoryListener: ListenerRegistration?
     private var accountSettingsListener: ListenerRegistration?
+    private var bankAccountsListener: ListenerRegistration?
 
     private init() {}
 
@@ -208,6 +209,13 @@ class FirestoreService: ObservableObject {
         return snapshot.documents.map { $0.data() }
     }
 
+    func getBankSessionsTyped(userId: String) async throws -> [BankSession] {
+        let snapshot = try await db.collection("users").document(userId)
+            .collection("bank_sessions")
+            .getDocuments()
+        return snapshot.documents.compactMap { try? $0.data(as: BankSession.self) }
+    }
+
     func deleteBankSession(userId: String, sessionId: String) async throws {
         let snapshot = try await db.collection("users").document(userId)
             .collection("bank_sessions")
@@ -219,6 +227,21 @@ class FirestoreService: ObservableObject {
     }
 
     // MARK: - Bank Accounts (cached per user)
+
+    func subscribeBankAccounts(userId: String, onChange: @escaping ([BankAccount]) -> Void) {
+        bankAccountsListener?.remove()
+        bankAccountsListener = db.collection("users").document(userId)
+            .collection("bank_accounts")
+            .addSnapshotListener { snapshot, _ in
+                guard let docs = snapshot?.documents else { return }
+                let accounts = docs.compactMap { doc -> BankAccount? in
+                    if let a = try? doc.data(as: BankAccount.self) { return a }
+                    if let raw = try? doc.data(as: RawFirestoreBankAccount.self) { return raw.toBankAccount(id: doc.documentID) }
+                    return nil
+                }
+                Task { @MainActor in onChange(accounts) }
+            }
+    }
 
     func saveBankAccounts(userId: String, accounts: [[String: Any]]) async throws {
         let batch = db.batch()
@@ -235,7 +258,11 @@ class FirestoreService: ObservableObject {
         let snapshot = try await db.collection("users").document(userId)
             .collection("bank_accounts")
             .getDocuments()
-        return snapshot.documents.compactMap { try? $0.data(as: BankAccount.self) }
+        return snapshot.documents.compactMap { doc -> BankAccount? in
+            if let a = try? doc.data(as: BankAccount.self) { return a }
+            if let raw = try? doc.data(as: RawFirestoreBankAccount.self) { return raw.toBankAccount(id: doc.documentID) }
+            return nil
+        }
     }
 
     // MARK: - Reset
@@ -355,10 +382,12 @@ class FirestoreService: ObservableObject {
         transactionListener?.remove()
         categoryListener?.remove()
         accountSettingsListener?.remove()
+        bankAccountsListener?.remove()
         recurringsListener?.remove()
         transactionListener = nil
         categoryListener = nil
         accountSettingsListener = nil
+        bankAccountsListener = nil
         recurringsListener = nil
     }
 }

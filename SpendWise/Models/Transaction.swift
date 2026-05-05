@@ -11,7 +11,9 @@ struct ReceiptItem: Codable, Identifiable {
     }
 }
 
-struct Transaction: Codable, Identifiable {
+struct Transaction: Codable, Identifiable, Hashable {
+    static func == (lhs: Transaction, rhs: Transaction) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
     @DocumentID var id: String?
     var userId: String
     var amount: Double

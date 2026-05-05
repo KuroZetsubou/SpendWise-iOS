@@ -11,40 +11,70 @@ struct BankConnectView: View {
     @State private var showInstitutionPicker = false
     @State private var selectedCountry = "IT"
     @State private var searchInstitution = ""
-    @State private var showDeleteSessionConfirm = false
-    @State private var sessionToDelete: String?
 
     private let bankService = BankAPIService.shared
     private let firestoreService = FirestoreService.shared
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                LazyVStack(spacing: 20) {
-                    // Connected Accounts
-                    if !viewModel.bankAccounts.isEmpty {
-                        connectedAccountsSection
+            List {
+                // ── Patrimonio totale ───────────────────────────────
+                if !viewModel.resolvedBankAccounts.isEmpty {
+                    Section {
+                        VStack(spacing: 8) {
+                            Text("Patrimonio netto")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(totalNetWorth.euroFormatted)
+                                .font(.title.bold())
+                                .foregroundStyle(totalNetWorth >= 0 ? Color.income : Color.expense)
+                            Text("\(viewModel.resolvedBankAccounts.count) conti · \(viewModel.bankSessions.count) banche")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
                     }
+                }
+                
+                // ── Connected Institutions ──────────────────────────
+                if !viewModel.bankSessions.isEmpty {
+                    Section("Banche collegate") {
+                        ForEach(viewModel.bankSessions) { session in
+                            NavigationLink(value: session) {
+                                bankSessionRow(session)
+                            }
+                        }
+                    }
+                }
 
-                    // Connect New Bank
-                    connectBankSection
+                // ── Connect New Bank ────────────────────────────────
+                Section {
+                    connectBankContent
+                }
 
-                    if let error = errorMessage {
+                if let error = errorMessage {
+                    Section {
                         Text(error)
                             .foregroundStyle(.red)
                             .font(.caption)
-                            .padding(.horizontal)
                     }
                 }
-                .padding(.vertical, 8)
             }
             .navigationTitle("Banca")
+            .navigationDestination(for: BankSession.self) { session in
+                BankSessionDetailView(session: session, viewModel: viewModel)
+            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await syncBankAccounts() }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        if isConnecting {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
                     }
                     .disabled(isConnecting)
                 }
@@ -55,93 +85,105 @@ struct BankConnectView: View {
             .onAppear {
                 Task {
                     await loadInstitutions()
-                    // Reload saved bank accounts from Firestore
                     if let userId = viewModel.userId {
-                        if let accounts = try? await firestoreService.getBankAccounts(userId: userId) {
-                            viewModel.bankAccounts = accounts
-                        }
+                        await viewModel.refreshBankSessions()
                     }
                 }
             }
         }
     }
 
-    // MARK: - Connected Accounts Section
-    private var connectedAccountsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Conti collegati")
-                .font(.headline)
-                .padding(.horizontal)
+    // MARK: - Total Net Worth
 
-            ForEach(viewModel.bankAccounts) { account in
-                BankAccountCardView(
-                    account: account,
-                    settings: viewModel.accountSettings[account.id],
-                    onSettingsUpdate: { settings in
-                        Task {
-                            guard let userId = viewModel.userId else { return }
-                            try? await firestoreService.updateAccountSettings(
-                                accountId: account.id,
-                                userId: userId,
-                                settings: settings
-                            )
-                        }
-                    }
-                )
-                .padding(.horizontal)
-            }
-        }
+    private var totalNetWorth: Double {
+        viewModel.resolvedBankAccounts
+            .filter { !$0.isExcluded }
+            .reduce(0) { $0 + $1.currentBalance }
     }
 
-    // MARK: - Connect Bank Section
-    private var connectBankSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Collega un conto bancario")
-                .font(.headline)
-                .padding(.horizontal)
+    // MARK: - Session Row
 
-            VStack(spacing: 16) {
-                Image(systemName: "building.columns.fill")
-                    .font(.system(size: 48))
-                    .foregroundStyle(Color.appPrimary)
+    private func bankSessionRow(_ session: BankSession) -> some View {
+        let accountsForSession = viewModel.resolvedBankAccounts.filter { $0.sessionId == session.sessionId }
+        let totalBalance = accountsForSession.reduce(0) { $0 + $1.currentBalance }
 
-                Text("Connetti il tuo conto bancario tramite Open Banking sicuro per sincronizzare automaticamente le transazioni.")
-                    .font(.subheadline)
+        return HStack(spacing: 12) {
+            Image(systemName: "building.columns.fill")
+                .font(.title2)
+                .foregroundStyle(Color.appPrimary)
+                .frame(width: 44, height: 44)
+                .background(Color.appPrimary.opacity(0.1))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(session.displayInstitutionName ?? "Banca")
+                    .font(.subheadline.bold())
+                HStack(spacing: 6) {
+                    Text("\(accountsForSession.count) conti")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let status = session.status {
+                        Text(status == "AUTHORIZED" ? "Attiva" : status)
+                            .font(.caption2)
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(status == "AUTHORIZED" ? Color.income.opacity(0.15) : Color.secondary.opacity(0.15))
+                            .foregroundStyle(status == "AUTHORIZED" ? Color.income : Color.secondary)
+                            .clipShape(Capsule())
+                    }
+                }
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(totalBalance.euroFormatted)
+                    .font(.subheadline.bold())
+                    .foregroundStyle(totalBalance >= 0 ? Color.income : Color.expense)
+                Text("totale")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-
-                // Country Picker
-                HStack {
-                    Text("Paese:")
-                        .font(.subheadline)
-                    Picker("Paese", selection: $selectedCountry) {
-                        Text("🇮🇹 Italia").tag("IT")
-                        Text("🇩🇪 Germania").tag("DE")
-                        Text("🇫🇷 Francia").tag("FR")
-                        Text("🇪🇸 Spagna").tag("ES")
-                        Text("🇳🇱 Paesi Bassi").tag("NL")
-                    }
-                    .pickerStyle(.menu)
-                    .onChange(of: selectedCountry) { _, _ in
-                        Task { await loadInstitutions() }
-                    }
-                }
-
-                Button {
-                    showInstitutionPicker = true
-                } label: {
-                    if isLoadingInstitutions {
-                        Label("Caricamento banche...", systemImage: "building.columns")
-                    } else {
-                        Label("Seleziona la tua banca", systemImage: "building.columns")
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(isLoadingInstitutions || isConnecting)
             }
-            .padding()
-            .cardStyle()
-            .padding(.horizontal)
+        }
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - Connect Bank Content
+
+    private var connectBankContent: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: "plus.circle.fill")
+                    .foregroundStyle(Color.appPrimary)
+                Text("Collega un conto bancario")
+                    .font(.subheadline)
+            }
+
+            HStack {
+                Text("Paese:")
+                    .font(.caption)
+                Picker("Paese", selection: $selectedCountry) {
+                    Text("🇮🇹 Italia").tag("IT")
+                    Text("🇩🇪 Germania").tag("DE")
+                    Text("🇫🇷 Francia").tag("FR")
+                    Text("🇪🇸 Spagna").tag("ES")
+                    Text("🇳🇱 Paesi Bassi").tag("NL")
+                }
+                .pickerStyle(.menu)
+                .onChange(of: selectedCountry) { _, _ in
+                    Task { await loadInstitutions() }
+                }
+            }
+
+            Button {
+                showInstitutionPicker = true
+            } label: {
+                Label(
+                    isLoadingInstitutions ? "Caricamento banche..." : "Seleziona la tua banca",
+                    systemImage: "building.columns"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isLoadingInstitutions || isConnecting)
         }
     }
 
@@ -234,10 +276,6 @@ struct BankConnectView: View {
         isConnecting = true
         errorMessage = nil
         do {
-            // ASWebAuthenticationSession handles any scheme including custom ones
-            // Enable Banking requires https:// redirect URLs.
-            // This GitHub Pages page receives the code and redirects to spendwise://
-            // ASWebAuthenticationSession then intercepts the spendwise:// callback.
             let redirectURL = "https://KuroZetsubou.github.io/spendwise-callback/"
             let authURL = try await bankService.initiateLink(
                 aspspName: institution.name,
@@ -247,29 +285,29 @@ struct BankConnectView: View {
             guard let url = URL(string: authURL) else {
                 throw URLError(.badURL)
             }
-
-            // Start OAuth session in-app — intercepts spendwise:// automatically
             let callbackURL = try await startWebAuthSession(url: url, callbackScheme: "spendwise")
 
-            // Extract code from callback URL
             guard let components = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
                   let code = components.queryItems?.first(where: { $0.name == "code" })?.value
             else {
                 throw EBError.invalidResponse("Missing auth code in callback URL: \(callbackURL)")
             }
 
-            // Exchange code for session token
             guard let userId = viewModel.userId else { return }
             let session = try await bankService.exchangeCode(code)
             let sessionData: [String: Any] = [
                 "accessToken": session.access_token ?? "",
                 "sessionId": session.session_id ?? "",
-                "createdAt": Date().timeIntervalSince1970
+                "aspsp": ["name": institution.name, "country": selectedCountry],
+                "description": "Connection to \(institution.displayName)",
+                "status": "AUTHORIZED",
+                "createdAt": ISO8601DateFormatter().string(from: Date())
             ]
             try await firestoreService.saveBankSession(userId: userId, session: sessionData)
+            await viewModel.refreshBankSessions()
             await syncBankAccounts()
         } catch ASWebAuthenticationSessionError.canceledLogin {
-            errorMessage = nil // user cancelled, no error needed
+            errorMessage = nil
         } catch {
             errorMessage = "Errore connessione: \(error.localizedDescription)"
         }
@@ -280,8 +318,6 @@ struct BankConnectView: View {
     private func startWebAuthSession(url: URL, callbackScheme: String) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
             #if os(iOS)
-            // Keep a strong reference to context inside the closure so ARC doesn't
-            // deallocate it before ASWebAuthenticationSession (which holds it weakly) uses it.
             let context = WebAuthPresentationContext()
             #endif
 
@@ -290,7 +326,7 @@ struct BankConnectView: View {
                 callbackURLScheme: callbackScheme
             ) { callbackURL, error in
                 #if os(iOS)
-                _ = context // retain until session completes
+                _ = context
                 #endif
                 if let error { continuation.resume(throwing: error); return }
                 guard let callbackURL else {
@@ -322,17 +358,17 @@ private final class WebAuthPresentationContext: NSObject, ASWebAuthenticationPre
 #endif
 
 extension BankConnectView {
-
-    private func syncBankAccounts() async {
+    func syncBankAccounts() async {
         guard let userId = viewModel.userId else { return }
         isConnecting = true
         errorMessage = nil
         do {
             let sessions = try await firestoreService.getBankSessions(userId: userId)
             for session in sessions {
-                guard let token = session["accessToken"] as? String else { continue }
+                guard let token = session["accessToken"] as? String, !token.isEmpty else { continue }
                 let ebAccounts = try await bankService.getAccounts(sessionToken: token)
                 let sessionId = session["sessionId"] as? String
+                let aspspName = (session["aspsp"] as? [String: Any])?["name"] as? String
                 var bankAccounts: [BankAccount] = ebAccounts.map { eb in
                     let bankBalances = (eb.balances ?? []).map { b in
                         BankBalance(amount: b.amountDouble, currency: b.currency, type: b.balance_type)
@@ -340,12 +376,12 @@ extension BankConnectView {
                     return BankAccount(
                         id: eb.id,
                         name: eb.name ?? eb.account_id?.iban ?? eb.id,
-                        officialName: eb.details,
+                        officialName: eb.account_id?.iban ?? eb.details,
                         type: eb.cash_account_type ?? "CACC",
                         subtype: nil,
                         balances: bankBalances,
                         institutionId: nil,
-                        institutionName: nil,
+                        institutionName: aspspName,
                         isCreditCard: nil,
                         creditLimit: nil,
                         paymentDay: nil,
@@ -370,7 +406,6 @@ extension BankConnectView {
                     try? Firestore.Encoder().encode(account)
                 }
                 try await firestoreService.saveBankAccounts(userId: userId, accounts: encoded)
-                viewModel.bankAccounts = bankAccounts
             }
         } catch {
             errorMessage = "Errore sincronizzazione: \(error.localizedDescription)"
@@ -379,7 +414,8 @@ extension BankConnectView {
     }
 }
 
-// MARK: - Bank Account Card
+// MARK: - Bank Account Card (reusable)
+
 struct BankAccountCardView: View {
     let account: BankAccount
     let settings: BankAccountSettings?
@@ -421,7 +457,7 @@ struct BankAccountCardView: View {
                     Text(account.currentBalance.currencyFormatted(code: account.displayCurrency))
                         .font(.subheadline.bold())
                         .foregroundStyle(balanceColor)
-                    Text(account.type.capitalized)
+                    Text(account.accountTypeLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -467,7 +503,10 @@ struct BankAccountCardView: View {
     }
 }
 
-#Preview {
-    BankConnectView(viewModel: DashboardViewModel())
+
+#Preview("BankConnectView") {
+    // Create a lightweight preview view model. Adjust the initializer if your DashboardViewModel requires different params.
+    let dashboardVM = DashboardViewModel()
+    return BankConnectView(viewModel: dashboardVM)
         .environmentObject(AuthViewModel())
 }

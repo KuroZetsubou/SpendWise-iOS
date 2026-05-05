@@ -10,6 +10,7 @@
 		0152A0436F86971150E4313E /* RecurringsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB5E0302975BAABFB6E8F69 /* RecurringsView.swift */; };
 		01D8D7DAE0AF3A54CA384A98 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40B614EB3FE912A2A81EA94F /* LoginView.swift */; };
 		038424A4AB79E0AEC5BB4ADC /* CategorizationMemoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0513B94913AFBFF297A7F90 /* CategorizationMemoryStore.swift */; };
+		116B29AD266899A06D054E3D /* TransactionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC04B02D3C66F3EFC851FE73 /* TransactionDetailView.swift */; };
 		198ED75955AF0570846E5C6F /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 356F7F9AF9519D9427DB70A4 /* FirebaseAuth */; };
 		1C6E97129119DD131174D284 /* AddTransactionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1F24D40EB067F2D416DA50 /* AddTransactionView.swift */; };
 		1F914C0EA518AC360BBA8389 /* CategoryManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED446D2B3C83262610D14F45 /* CategoryManagerView.swift */; };
@@ -17,6 +18,7 @@
 		2A09F913C3403E6B7F58081E /* CategorizationMemoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0513B94913AFBFF297A7F90 /* CategorizationMemoryStore.swift */; };
 		30601315552483C87C8A1F2B /* BankAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DA5E51DD5E3CE47F7C50F79 /* BankAccount.swift */; };
 		30FC7F24C43BFF6837BBBAA4 /* TransactionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC131040AE55BCF63558861 /* TransactionRowView.swift */; };
+		3165C620FA0D4FFB22C0854C /* TransactionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC04B02D3C66F3EFC851FE73 /* TransactionDetailView.swift */; };
 		3892603E30FA7204AF607A24 /* FirestoreService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60EEE4E5F552EAC9CD528049 /* FirestoreService.swift */; };
 		3A596379E2C05514CFFDCF9A /* BankConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91C9736DEC8D3013D5F26B51 /* BankConnectView.swift */; };
 		42C14AEAFAAD8A54F607AF3C /* RecurringsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CB5E0302975BAABFB6E8F69 /* RecurringsView.swift */; };
@@ -49,6 +51,7 @@
 		94439382D45EF494FBA7E2C2 /* StatCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5CEEC8B0015A98B3CFDBB4A /* StatCardView.swift */; };
 		966DE51437425C671BDDCCBE /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E9F7BE7622A81CCF5294976 /* AuthViewModel.swift */; };
 		9A3323212402760B149EE219 /* Transaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72904B3CB281FE828FD74440 /* Transaction.swift */; };
+		9BD0329DAFAFA023423CB71A /* BankSessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE887C47735DFC1507A49712 /* BankSessionDetailView.swift */; };
 		9CF165A0150A44A75ED58C96 /* DashboardViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79609B006AE6A4E5982F57D4 /* DashboardViewModel.swift */; };
 		9E9CD9D9B48BAE748FFCCCDB /* CategoryIconView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F970A2845B88805FB6D17B7 /* CategoryIconView.swift */; };
 		9E9E8C38E29E433BEB83C990 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7898859B7E483CA364A8810C /* Formatters.swift */; };
@@ -60,12 +63,14 @@
 		A9849BD23B32E08D851F0095 /* TransactionNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532975906F9D0EED3531E993 /* TransactionNormalizer.swift */; };
 		AD4602AEBF55D854EE76B62D /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C08CF975C2BBCD1D8681BDCF /* ContentView.swift */; };
 		B309F193B571E9FE64C852CE /* Transaction.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72904B3CB281FE828FD74440 /* Transaction.swift */; };
+		B31272321318F5960451E385 /* BankSessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE887C47735DFC1507A49712 /* BankSessionDetailView.swift */; };
 		B7A86BF13B9E993F46F0E9A5 /* BankAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DA5E51DD5E3CE47F7C50F79 /* BankAccount.swift */; };
 		B9A852BACC65D33D662619A9 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 74C9A1B7C5CDD7AB5A1F953B /* FirebaseFirestore */; };
 		BDAD3DB157EBB8971C3B9E6D /* EnableBankingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4708D81855695F4F50123C48 /* EnableBankingService.swift */; };
 		C342F87378D0586342101B5D /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEBB86DE022AD4B70640B7C6 /* Constants.swift */; };
 		C45653783D33FC712244A9C0 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 5889CAAC322E95082E627D87 /* GoogleSignIn */; };
 		C73F586B5882CC58122EAE86 /* TransactionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC131040AE55BCF63558861 /* TransactionRowView.swift */; };
+		CCA988A5FAFD5ACEB45F88A7 /* BankAccountDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D40037F0B5ED3BDAF1B642 /* BankAccountDetailView.swift */; };
 		D186C9D27AEACE7A6FB00055 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C160F29773809EDED40ACD00 /* DashboardView.swift */; };
 		D2362A9C096DE3F995FBB3C4 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5045C982E8BA4DC7D934683 /* SettingsView.swift */; };
 		D658408E039F4C1765EDD321 /* StatCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5CEEC8B0015A98B3CFDBB4A /* StatCardView.swift */; };
@@ -74,6 +79,7 @@
 		E1A59328F937EB8E80EF5DDA /* RecurringPayment.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F108F4690959B09A79F482 /* RecurringPayment.swift */; };
 		E3422155DE31CC7EDEDB1B34 /* AppCategory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827FF9D3B50DBCC4A392E6BE /* AppCategory.swift */; };
 		E398FD2C3441EC02D624309C /* CategorizationPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF3773CAEEB112FD6504DE38 /* CategorizationPipeline.swift */; };
+		E9ECA1EE924E7DDFA118FA6B /* BankAccountDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1D40037F0B5ED3BDAF1B642 /* BankAccountDetailView.swift */; };
 		EA4C5AB79441E9352628D7A9 /* Formatters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7898859B7E483CA364A8810C /* Formatters.swift */; };
 		F19F0061FBA2B212F3D87040 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = 1EAF452F0C7EE6C21F0021AD /* FirebaseFirestore */; };
 		F1A88F68729EB3D78601FC49 /* BankAPIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D76F2E8DE607EF30CF08B414 /* BankAPIService.swift */; };
@@ -103,7 +109,7 @@
 		827FF9D3B50DBCC4A392E6BE /* AppCategory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCategory.swift; sourceTree = "<group>"; };
 		8CB5E0302975BAABFB6E8F69 /* RecurringsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringsView.swift; sourceTree = "<group>"; };
 		91C9736DEC8D3013D5F26B51 /* BankConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankConnectView.swift; sourceTree = "<group>"; };
-		9D27C13E5F20EBB81CBFE787 /* SpendWise.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SpendWise.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9D27C13E5F20EBB81CBFE787 /* SpendWise.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpendWise.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0513B94913AFBFF297A7F90 /* CategorizationMemoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategorizationMemoryStore.swift; sourceTree = "<group>"; };
 		BCA468EA617DB1F9732CD3A2 /* AIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIService.swift; sourceTree = "<group>"; };
 		BEBB86DE022AD4B70640B7C6 /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
@@ -112,8 +118,11 @@
 		C1F108F4690959B09A79F482 /* RecurringPayment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecurringPayment.swift; sourceTree = "<group>"; };
 		C5045C982E8BA4DC7D934683 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		C964F3DF72425C4CCFC4E314 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		CC04B02D3C66F3EFC851FE73 /* TransactionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionDetailView.swift; sourceTree = "<group>"; };
 		D0C25E5CFECA71856393A9AA /* SpendWise.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SpendWise.entitlements; sourceTree = "<group>"; };
+		D1D40037F0B5ED3BDAF1B642 /* BankAccountDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAccountDetailView.swift; sourceTree = "<group>"; };
 		D76F2E8DE607EF30CF08B414 /* BankAPIService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAPIService.swift; sourceTree = "<group>"; };
+		DE887C47735DFC1507A49712 /* BankSessionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankSessionDetailView.swift; sourceTree = "<group>"; };
 		E04C4117C178596B46A4BAC1 /* SpendWiseApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpendWiseApp.swift; sourceTree = "<group>"; };
 		E9BCDA84E707D68B19CB31B0 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		ED446D2B3C83262610D14F45 /* CategoryManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryManagerView.swift; sourceTree = "<group>"; };
@@ -252,7 +261,9 @@
 		AE5BBF1061BA4EBBBF05EDB5 /* Bank */ = {
 			isa = PBXGroup;
 			children = (
+				D1D40037F0B5ED3BDAF1B642 /* BankAccountDetailView.swift */,
 				91C9736DEC8D3013D5F26B51 /* BankConnectView.swift */,
+				DE887C47735DFC1507A49712 /* BankSessionDetailView.swift */,
 			);
 			path = Bank;
 			sourceTree = "<group>";
@@ -260,6 +271,7 @@
 		B86E77111F02278E0BB0DA73 /* Transactions */ = {
 			isa = PBXGroup;
 			children = (
+				CC04B02D3C66F3EFC851FE73 /* TransactionDetailView.swift */,
 				FA3ED697CE61BF1855FFB654 /* TransactionsView.swift */,
 			);
 			path = Transactions;
@@ -383,7 +395,6 @@
 						ProvisioningStyle = Automatic;
 					};
 					D5C2243A4A78E8007D7D7854 = {
-						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -445,7 +456,9 @@
 				6CF30EE555F12137430FBED8 /* AuthViewModel.swift in Sources */,
 				A79BA82D9C64A7E810AC0987 /* BankAPIService.swift in Sources */,
 				30601315552483C87C8A1F2B /* BankAccount.swift in Sources */,
+				CCA988A5FAFD5ACEB45F88A7 /* BankAccountDetailView.swift in Sources */,
 				3A596379E2C05514CFFDCF9A /* BankConnectView.swift in Sources */,
+				B31272321318F5960451E385 /* BankSessionDetailView.swift in Sources */,
 				2A09F913C3403E6B7F58081E /* CategorizationMemoryStore.swift in Sources */,
 				E398FD2C3441EC02D624309C /* CategorizationPipeline.swift in Sources */,
 				4ABB229113535C261D936FA4 /* CategoryIconView.swift in Sources */,
@@ -465,6 +478,7 @@
 				7891BD8E0171677E91DA045D /* SpendWiseApp.swift in Sources */,
 				D658408E039F4C1765EDD321 /* StatCardView.swift in Sources */,
 				9A3323212402760B149EE219 /* Transaction.swift in Sources */,
+				116B29AD266899A06D054E3D /* TransactionDetailView.swift in Sources */,
 				585FDA19210ABFD1B969F2BC /* TransactionNormalizer.swift in Sources */,
 				30FC7F24C43BFF6837BBBAA4 /* TransactionRowView.swift in Sources */,
 				520B1F4F56F495DCD79C1AC9 /* TransactionsView.swift in Sources */,
@@ -484,7 +498,9 @@
 				966DE51437425C671BDDCCBE /* AuthViewModel.swift in Sources */,
 				F1A88F68729EB3D78601FC49 /* BankAPIService.swift in Sources */,
 				B7A86BF13B9E993F46F0E9A5 /* BankAccount.swift in Sources */,
+				E9ECA1EE924E7DDFA118FA6B /* BankAccountDetailView.swift in Sources */,
 				860E2474C7F0F6C9965B2C7A /* BankConnectView.swift in Sources */,
+				9BD0329DAFAFA023423CB71A /* BankSessionDetailView.swift in Sources */,
 				038424A4AB79E0AEC5BB4ADC /* CategorizationMemoryStore.swift in Sources */,
 				9FB19C461EB3A8960157B976 /* CategorizationPipeline.swift in Sources */,
 				9E9CD9D9B48BAE748FFCCCDB /* CategoryIconView.swift in Sources */,
@@ -504,6 +520,7 @@
 				F1EEE990A2ECD13E7BAC3C9C /* SpendWiseApp.swift in Sources */,
 				94439382D45EF494FBA7E2C2 /* StatCardView.swift in Sources */,
 				B309F193B571E9FE64C852CE /* Transaction.swift in Sources */,
+				3165C620FA0D4FFB22C0854C /* TransactionDetailView.swift in Sources */,
 				A9849BD23B32E08D851F0095 /* TransactionNormalizer.swift in Sources */,
 				C73F586B5882CC58122EAE86 /* TransactionRowView.swift in Sources */,
 				FB5624B2A664172539A14928 /* TransactionsView.swift in Sources */,
@@ -635,7 +652,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 72K2VK8SK2;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = SpendWise/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -717,7 +734,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 72K2VK8SK2;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = SpendWise/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

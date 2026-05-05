@@ -12,6 +12,7 @@ struct TransactionsView: View {
     @State private var isBatchCategorizing = false
     @State private var batchProgress: (done: Int, total: Int) = (0, 0)
     @State private var showBatchDone = false
+    @State private var selectedTransaction: Transaction? = nil
 
     private var filteredTransactions: [Transaction] {
         viewModel.transactions.filter { tx in
@@ -46,14 +47,17 @@ struct TransactionsView: View {
                         ForEach(groupedTransactions.keys.sorted().reversed(), id: \.self) { month in
                             Section(header: monthSectionHeader(month: month)) {
                                 ForEach(groupedTransactions[month] ?? []) { tx in
-                                    TransactionRowView(
-                                        transaction: tx,
-                                        onDelete: {
-                                            transactionToDelete = tx
-                                            showDeleteConfirm = true
-                                        },
-                                        onEdit: { transactionToEdit = tx }
-                                    )
+                                    NavigationLink(value: tx) {
+                                        TransactionRowView(
+                                            transaction: tx,
+                                            onDelete: {
+                                                transactionToDelete = tx
+                                                showDeleteConfirm = true
+                                            },
+                                            onEdit: { transactionToEdit = tx }
+                                        )
+                                    }
+                                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
                                 }
                             }
                         }
@@ -64,6 +68,9 @@ struct TransactionsView: View {
                     .listStyle(.inset)
                     #endif
                 }
+            }
+            .navigationDestination(for: Transaction.self) { tx in
+                TransactionDetailView(transaction: tx, viewModel: viewModel)
             }
             .navigationTitle("Transazioni")
             .searchable(text: $searchText, prompt: "Cerca transazioni...")
