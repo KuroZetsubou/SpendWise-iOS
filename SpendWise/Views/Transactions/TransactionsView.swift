@@ -12,28 +12,14 @@ struct TransactionsView: View {
     @State private var isBatchCategorizing = false
     @State private var batchProgress: (done: Int, total: Int) = (0, 0)
     @State private var showBatchDone = false
-    @State private var selectedTransaction: Transaction? = nil
-
-    private var filteredTransactions: [Transaction] {
-        viewModel.transactions.filter { tx in
-            let matchesSearch = searchText.isEmpty
-                || tx.description.localizedCaseInsensitiveContains(searchText)
-                || tx.category.localizedCaseInsensitiveContains(searchText)
-            let matchesType = selectedTypeFilter == nil || tx.type == selectedTypeFilter
-            let matchesCategory = selectedCategoryFilter == nil
-                || tx.category == selectedCategoryFilter
-            return matchesSearch && matchesType && matchesCategory
-        }
-    }
-
-    private var availableCategories: [String] {
-        Array(Set(viewModel.transactions.map { $0.category })).sorted()
-    }
+    @State private var cachedFiltered: [Transaction] = []
+    @State private var cachedGrouped: [String: [Transaction]] = [:]
+    @State private var cachedCategories: [String] = []
 
     var body: some View {
         NavigationStack {
             Group {
-                if filteredTransactions.isEmpty && searchText.isEmpty {
+                if cachedFiltered.isEmpty && searchText.isEmpty {
                     ContentUnavailableView {
                         Label("Nessuna transazione", systemImage: "tray")
                     } description: {
@@ -44,9 +30,9 @@ struct TransactionsView: View {
                     }
                 } else {
                     List {
-                        ForEach(groupedTransactions.keys.sorted().reversed(), id: \.self) { month in
+                        ForEach(cachedGrouped.keys.sorted().reversed(), id: \.self) { month in
                             Section(header: monthSectionHeader(month: month)) {
-                                ForEach(groupedTransactions[month] ?? []) { tx in
+                                ForEach(cachedGrouped[month] ?? []) { tx in
                                     NavigationLink(value: tx) {
                                         TransactionRowView(
                                             transaction: tx,
@@ -74,6 +60,11 @@ struct TransactionsView: View {
             }
             .navigationTitle("Transazioni")
             .searchable(text: $searchText, prompt: "Cerca transazioni...")
+            .task { updateCaches() }
+            .onChange(of: viewModel.transactions) { _, _ in updateCaches() }
+            .onChange(of: searchText) { _, _ in updateCaches() }
+            .onChange(of: selectedTypeFilter) { _, _ in updateCaches() }
+            .onChange(of: selectedCategoryFilter) { _, _ in updateCaches() }
             .overlay {
                 if isBatchCategorizing {
                     ZStack {
@@ -115,10 +106,10 @@ struct TransactionsView: View {
                             Button("Entrate") { selectedTypeFilter = .income }
                             Button("Uscite") { selectedTypeFilter = .expense }
                         }
-                        if !availableCategories.isEmpty {
+                        if !cachedCategories.isEmpty {
                             Section("Filtra per categoria") {
                                 Button("Tutte") { selectedCategoryFilter = nil }
-                                ForEach(availableCategories, id: \.self) { cat in
+                                ForEach(cachedCategories, id: \.self) { cat in
                                     Button(cat) { selectedCategoryFilter = cat }
                                 }
                             }
@@ -170,37 +161,45 @@ struct TransactionsView: View {
         }
     }
 
-    // MARK: - Grouping
+    // MARK: - Static formatters (created once)
+    private static let _fmtYM: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM"; f.locale = Locale(identifier: "en_US_POSIX"); return f
+    }()
+    private static let _fmtMonthDisplay: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; f.locale = Locale(identifier: "it_IT"); return f
+    }()
 
-    private var groupedTransactions: [String: [Transaction]] {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM"
-        let displayFormatter = DateFormatter()
-        displayFormatter.dateFormat = "MMMM yyyy"
-        displayFormatter.locale = Locale(identifier: "it_IT")
+    // MARK: - Cache update
+
+    private func updateCaches() {
+        let txs = viewModel.transactions
+        let filtered = txs.filter { tx in
+            let matchesSearch = searchText.isEmpty
+                || tx.description.localizedCaseInsensitiveContains(searchText)
+                || tx.category.localizedCaseInsensitiveContains(searchText)
+            let matchesType = selectedTypeFilter == nil || tx.type == selectedTypeFilter
+            let matchesCategory = selectedCategoryFilter == nil || tx.category == selectedCategoryFilter
+            return matchesSearch && matchesType && matchesCategory
+        }
+        cachedFiltered = filtered
 
         var grouped: [String: [Transaction]] = [:]
-        for tx in filteredTransactions {
-            let key = String(tx.date.prefix(7)) // "yyyy-MM"
-            grouped[key, default: []].append(tx)
-        }
-        return grouped
+        for tx in filtered { grouped[String(tx.date.prefix(7)), default: []].append(tx) }
+        cachedGrouped = grouped
+
+        cachedCategories = Array(Set(txs.map { $0.category })).sorted()
     }
 
+    // MARK: - Grouping header
+
     private func monthSectionHeader(month: String) -> some View {
-        let displayFormatter = DateFormatter()
-        displayFormatter.dateFormat = "yyyy-MM"
-        displayFormatter.locale = Locale(identifier: "it_IT")
-        let displayFormatter2 = DateFormatter()
-        displayFormatter2.dateFormat = "MMMM yyyy"
-        displayFormatter2.locale = Locale(identifier: "it_IT")
-        let monthDate = displayFormatter.date(from: month) ?? Date()
-        let monthTxs = groupedTransactions[month] ?? []
+        let monthDate = Self._fmtYM.date(from: month) ?? Date()
+        let monthTxs = cachedGrouped[month] ?? []
         let income = monthTxs.filter { $0.type == .income && !$0.isIgnored }.reduce(0) { $0 + $1.amount }
         let expense = monthTxs.filter { $0.type == .expense && !$0.isIgnored }.reduce(0) { $0 + $1.amount }
 
         return HStack {
-            Text(displayFormatter2.string(from: monthDate).capitalized)
+            Text(Self._fmtMonthDisplay.string(from: monthDate).capitalized)
                 .font(.subheadline.bold())
                 .foregroundStyle(.primary)
             Spacer()

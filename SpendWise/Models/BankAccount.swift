@@ -23,6 +23,8 @@ struct BankAccount: Codable, Identifiable, Hashable {
     var currency: String?
     var calculatedBalance: Double?
     var cashAccountType: String?
+    /// True for manually-managed accounts not connected via Open Banking
+    var isManual: Bool?
 
     var displayName: String { customName ?? officialName ?? name }
     var isExcluded: Bool { excludeFromTotal == true }
@@ -158,6 +160,8 @@ struct BankSession: Codable, Identifiable, Hashable {
     var status: String?
     var description: String?
     var aspsp: Aspsp?
+    /// True for manually-managed sessions not connected via Open Banking
+    var isManual: Bool?
 
     struct Aspsp: Codable {
         var name: String?

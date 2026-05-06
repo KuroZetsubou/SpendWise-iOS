@@ -13,6 +13,38 @@ struct BankConnectView: View {
     @State private var showSyncResult = false
     @State private var lastSyncResult: TransactionSyncService.SyncResult?
     @State private var syncDays = 30
+    @State private var showTRImport = false
+    @State private var showTRCountryPicker = false
+
+    // Countries where Trade Republic holds a banking licence and is reachable via Enable Banking
+    private let trCountries: [(code: String, flag: String, name: String)] = [
+        ("AT", "🇦🇹", "Austria"),
+        ("BE", "🇧🇪", "Belgio"),
+        ("BG", "🇧🇬", "Bulgaria"),
+        ("HR", "🇭🇷", "Croazia"),
+        ("CZ", "🇨🇿", "Repubblica Ceca"),
+        ("DK", "🇩🇰", "Danimarca"),
+        ("EE", "🇪🇪", "Estonia"),
+        ("FI", "🇫🇮", "Finlandia"),
+        ("FR", "🇫🇷", "Francia"),
+        ("DE", "🇩🇪", "Germania"),
+        ("GR", "🇬🇷", "Grecia"),
+        ("HU", "🇭🇺", "Ungheria"),
+        ("IE", "🇮🇪", "Irlanda"),
+        ("IT", "🇮🇹", "Italia"),
+        ("LV", "🇱🇻", "Lettonia"),
+        ("LT", "🇱🇹", "Lituania"),
+        ("LU", "🇱🇺", "Lussemburgo"),
+        ("NL", "🇳🇱", "Paesi Bassi"),
+        ("NO", "🇳🇴", "Norvegia"),
+        ("PL", "🇵🇱", "Polonia"),
+        ("PT", "🇵🇹", "Portogallo"),
+        ("RO", "🇷🇴", "Romania"),
+        ("SK", "🇸🇰", "Slovacchia"),
+        ("SI", "🇸🇮", "Slovenia"),
+        ("ES", "🇪🇸", "Spagna"),
+        ("SE", "🇸🇪", "Svezia"),
+    ]
 
     private let bankService = BankAPIService.shared
     private let firestoreService = FirestoreService.shared
@@ -43,7 +75,8 @@ struct BankConnectView: View {
                 if !viewModel.bankSessions.isEmpty {
                     Section("Banche collegate") {
                         ForEach(viewModel.bankSessions) { session in
-                            let isExpired = ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
+                            let isManual  = session.isManual == true
+                            let isExpired = !isManual && ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
                             if isExpired {
                                 bankSessionRow(session)
                                     .overlay(alignment: .bottomTrailing) {
@@ -138,6 +171,64 @@ struct BankConnectView: View {
                     connectBankContent
                 }
 
+                // ── Trade Republic ───────────────────────────────────
+                Section {
+                    Button {
+                        showTRCountryPicker = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.green.opacity(0.12))
+                                    .frame(width: 40, height: 40)
+                                Text("🟢")
+                                    .font(.title3)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Collega Trade Republic")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.primary)
+                                Text("Open Banking · 26 paesi EU")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Button {
+                        showTRImport = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.green.opacity(0.12))
+                                    .frame(width: 40, height: 40)
+                                Image(systemName: "doc.text")
+                                    .font(.title3)
+                                    .foregroundStyle(.green)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Importa CSV Trade Republic")
+                                    .font(.subheadline.bold())
+                                    .foregroundStyle(.primary)
+                                Text("Importa account_transactions.csv")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                } header: {
+                    Label("Trade Republic", systemImage: "chart.line.uptrend.xyaxis")
+                }
+
                 if let error = errorMessage {
                     Section {
                         Text(error)
@@ -166,6 +257,22 @@ struct BankConnectView: View {
             }
             .sheet(isPresented: $showInstitutionPicker) {
                 institutionPickerSheet
+            }
+            .sheet(isPresented: $showTRImport) {
+                TradeRepublicImportView(viewModel: viewModel)
+            }
+            .confirmationDialog("Seleziona il tuo paese", isPresented: $showTRCountryPicker, titleVisibility: .visible) {
+                ForEach(trCountries, id: \.code) { country in
+                    Button("\(country.flag) \(country.name)") {
+                        selectedCountry = country.code
+                        Task {
+                            await loadInstitutions()
+                            searchInstitution = "Trade Republic"
+                            showInstitutionPicker = true
+                        }
+                    }
+                }
+                Button("Annulla", role: .cancel) {}
             }
             .alert("Sincronizzazione completata", isPresented: $showSyncResult) {
                 Button("OK") {}
@@ -203,12 +310,13 @@ struct BankConnectView: View {
     private func bankSessionRow(_ session: BankSession) -> some View {
         let accountsForSession = viewModel.resolvedBankAccounts.filter { $0.sessionId == session.sessionId }
         let totalBalance = accountsForSession.reduce(0) { $0 + $1.currentBalance }
-        let isExpired = ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
+        let isManual  = session.isManual == true
+        let isExpired = !isManual && ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
 
         return HStack(spacing: 12) {
-            Image(systemName: isExpired ? "exclamationmark.triangle.fill" : "building.columns.fill")
+            Image(systemName: isManual ? "square.and.pencil" : isExpired ? "exclamationmark.triangle.fill" : "building.columns.fill")
                 .font(.title2)
-                .foregroundStyle(isExpired ? .orange : Color.appPrimary)
+                .foregroundStyle(isManual ? Color.appPrimary : isExpired ? .orange : Color.appPrimary)
                 .frame(width: 44, height: 44)
                 .background((isExpired ? Color.orange : Color.appPrimary).opacity(0.1))
                 .clipShape(Circle())
@@ -217,10 +325,17 @@ struct BankConnectView: View {
                 Text(session.displayInstitutionName ?? "Banca")
                     .font(.subheadline.bold())
                 HStack(spacing: 6) {
-                    Text("\(accountsForSession.count) conti")
+                    Text(isManual ? "1 conto" : "\(accountsForSession.count) conti")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    if isExpired {
+                    if isManual {
+                        Text("Manuale")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(Color.appPrimary.opacity(0.15))
+                            .foregroundStyle(Color.appPrimary)
+                            .clipShape(Capsule())
+                    } else if isExpired {
                         Text("Scaduta — Riconnetti")
                             .font(.caption2.bold())
                             .padding(.horizontal, 6).padding(.vertical, 1)
@@ -250,7 +365,7 @@ struct BankConnectView: View {
                     Text(totalBalance.euroFormatted)
                         .font(.subheadline.bold())
                         .foregroundStyle(totalBalance >= 0 ? Color.income : Color.expense)
-                    Text("totale")
+                    Text(isManual ? "saldo" : "totale")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

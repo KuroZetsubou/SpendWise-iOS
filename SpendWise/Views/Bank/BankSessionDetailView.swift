@@ -4,6 +4,8 @@ struct BankSessionDetailView: View {
     let session: BankSession
     @ObservedObject var viewModel: DashboardViewModel
 
+    private var isManual: Bool { session.isManual == true }
+
     private var accountsForSession: [BankAccount] {
         viewModel.resolvedBankAccounts.filter { $0.sessionId == session.sessionId }
     }
@@ -17,19 +19,26 @@ struct BankSessionDetailView: View {
             // ── Header ──────────────────────────────────────────────
             Section {
                 VStack(spacing: 8) {
-                    Image(systemName: "building.columns.fill")
+                    Image(systemName: isManual ? "square.and.pencil" : "building.columns.fill")
                         .font(.system(size: 40))
                         .foregroundStyle(Color.appPrimary)
                     Text(session.displayInstitutionName ?? "Banca")
                         .font(.title2.bold())
-                    if let country = session.aspsp?.country {
+                    if isManual {
+                        Text("Conto manuale")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.appPrimary.opacity(0.12))
+                            .foregroundStyle(Color.appPrimary)
+                            .clipShape(Capsule())
+                    } else if let country = session.aspsp?.country {
                         Text(flagEmoji(for: country))
                             .font(.title3)
                     }
                     Text(totalBalance.euroFormatted)
                         .font(.title.bold())
                         .foregroundStyle(totalBalance >= 0 ? Color.income : Color.expense)
-                    Text("\(accountsForSession.count) conti collegati")
+                    Text(isManual ? "Saldo calcolato dalle transazioni" : "\(accountsForSession.count) conti collegati")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -46,20 +55,30 @@ struct BankSessionDetailView: View {
                 }
             }
 
-            // ── Session Info ────────────────────────────────────────
-            Section("Dettagli connessione") {
-                if let status = session.status {
-                    infoRow(icon: "checkmark.shield", label: "Stato",
-                            value: status == "AUTHORIZED" ? "Autorizzata" : status)
+            // ── Session Info (only for real bank connections) ────────
+            if !isManual {
+                Section("Dettagli connessione") {
+                    if let status = session.status {
+                        infoRow(icon: "checkmark.shield", label: "Stato",
+                                value: status == "AUTHORIZED" ? "Autorizzata" : status)
+                    }
+                    if let desc = session.description {
+                        infoRow(icon: "text.alignleft", label: "Descrizione", value: desc)
+                    }
+                    if let created = session.createdAt {
+                        infoRow(icon: "calendar", label: "Collegata il", value: String(created.prefix(10)))
+                    }
+                    if let sid = session.sessionId {
+                        infoRow(icon: "number", label: "Session ID", value: String(sid.prefix(8)) + "…")
+                    }
                 }
-                if let desc = session.description {
-                    infoRow(icon: "text.alignleft", label: "Descrizione", value: desc)
-                }
-                if let created = session.createdAt {
-                    infoRow(icon: "calendar", label: "Collegata il", value: String(created.prefix(10)))
-                }
-                if let sid = session.sessionId {
-                    infoRow(icon: "number", label: "Session ID", value: String(sid.prefix(8)) + "…")
+            } else {
+                Section("Informazioni") {
+                    if let created = session.createdAt {
+                        infoRow(icon: "calendar", label: "Primo import", value: String(created.prefix(10)))
+                    }
+                    infoRow(icon: "info.circle", label: "Tipo", value: "Importazione manuale CSV")
+                    infoRow(icon: "doc.text", label: "Fonte", value: "Trade Republic CSV export")
                 }
             }
         }
@@ -101,6 +120,14 @@ struct BankSessionDetailView: View {
                         Text("Escluso")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                    }
+                    if account.isManual == true {
+                        Text("Manuale")
+                            .font(.caption2)
+                            .padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(Color.appPrimary.opacity(0.1))
+                            .foregroundStyle(Color.appPrimary)
+                            .clipShape(Capsule())
                     }
                 }
             }

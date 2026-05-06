@@ -19,12 +19,18 @@ struct BankAccountDetailView: View {
         accountTransactions.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
     }
 
+    /// For manual accounts, balance = income − expense (live from transactions).
+    /// For Open-Banking accounts, use the stored/fetched balance.
+    private var displayBalance: Double {
+        account.isManual == true ? (totalIncome - totalSpent) : account.currentBalance
+    }
+
     var body: some View {
         List {
             // ── Header ──────────────────────────────────────────────
             Section {
                 VStack(spacing: 8) {
-                    Image(systemName: account.isCreditCard == true ? "creditcard.fill" : "building.columns.fill")
+                    Image(systemName: account.isManual == true ? "square.and.pencil" : account.isCreditCard == true ? "creditcard.fill" : "building.columns.fill")
                         .font(.system(size: 36))
                         .foregroundStyle(Color.appPrimary)
                     Text(account.displayName)
@@ -34,9 +40,23 @@ struct BankAccountDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    Text(account.currentBalance.currencyFormatted(code: account.displayCurrency))
+                    if account.isManual == true {
+                        Text("Conto manuale")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.appPrimary.opacity(0.12))
+                            .foregroundStyle(Color.appPrimary)
+                            .clipShape(Capsule())
+                    }
+                    Text(displayBalance.currencyFormatted(code: account.displayCurrency))
                         .font(.title.bold())
-                        .foregroundStyle(account.currentBalance >= 0 ? Color.income : Color.expense)
+                        .foregroundStyle(displayBalance >= 0 ? Color.income : Color.expense)
+                    if account.isManual == true {
+                        Text("Saldo calcolato dalle transazioni importate")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                     HStack(spacing: 16) {
                         Label(account.accountTypeLabel, systemImage: "tag")
                         Label(account.displayCurrency, systemImage: "dollarsign.circle")

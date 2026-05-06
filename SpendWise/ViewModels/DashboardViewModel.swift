@@ -74,6 +74,7 @@ class DashboardViewModel: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+        setupDataProcessing()
     }
 
     // MARK: - Listeners Setup
@@ -131,6 +132,13 @@ class DashboardViewModel: ObservableObject {
             if r.institutionName == nil, let sid = r.sessionId,
                let session = bankSessions.first(where: { $0.sessionId == sid }) {
                 r.institutionName = session.displayInstitutionName
+            }
+            // For manual accounts, compute balance live from linked transactions
+            if r.isManual == true {
+                let linked = transactions.filter { $0.accountId == r.id && $0.ignored != true }
+                let income  = linked.filter { $0.type == .income  }.reduce(0) { $0 + $1.amount }
+                let expense = linked.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
+                r.calculatedBalance = income - expense
             }
             return r
         }
@@ -195,79 +203,51 @@ class DashboardViewModel: ObservableObject {
     }
 
     var selectedMonthLabel: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMMM yyyy"
-        formatter.locale = Locale(identifier: "it_IT")
-        return formatter.string(from: selectedMonthDate).capitalized
+        Self._fmtMonthLabel.string(from: selectedMonthDate).capitalized
     }
 
     var isCurrentMonth: Bool { selectedMonthOffset == 0 }
 
-    // MARK: - Computed Properties (based on selectedMonthOffset)
+    // MARK: - Static date formatters (created once, accessed only from @MainActor)
+    // DateFormatter is not thread-safe; these are safe because the ViewModel is @MainActor.
+    nonisolated(unsafe) private static let _fmtDate: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; f.locale = Locale(identifier: "en_US_POSIX"); return f
+    }()
+    nonisolated(unsafe) private static let _fmtDateTime: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"; f.locale = Locale(identifier: "en_US_POSIX"); return f
+    }()
+    nonisolated(unsafe) private static let _fmtDateTimeTZ: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"; f.locale = Locale(identifier: "en_US_POSIX"); return f
+    }()
+    nonisolated(unsafe) private static let _fmtISO8601 = ISO8601DateFormatter()
+    nonisolated(unsafe) private static let _fmtMonthLabel: DateFormatter = {
+        let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; f.locale = Locale(identifier: "it_IT"); return f
+    }()
+
+    // MARK: - Cached derived state
+    // Updated by Combine pipeline — views always read pre-computed values.
+    @Published private(set) var currentMonthTransactions: [Transaction] = []
+    @Published private(set) var monthlyChartData: [MonthlyData] = []
+
+    // MARK: - Computed Properties (derived from cached arrays — fast O(n) on small subsets)
 
     var userId: String? { authService.currentUser?.uid }
-
-    var currentMonthTransactions: [Transaction] {
-        let calendar = Calendar.current
-        let ref = selectedMonthDate
-        return transactions.filter { tx in
-            guard !tx.isIgnored, !tx.isTransfer else { return false }
-            guard let txDate = dateFromString(tx.date) else { return false }
-            return calendar.isDate(txDate, equalTo: ref, toGranularity: .month)
-        }
-    }
 
     var currentMonthIncome: Double {
         currentMonthTransactions.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
     }
-
     var currentMonthExpenses: Double {
         currentMonthTransactions.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
     }
+    var currentMonthBalance: Double { currentMonthIncome - currentMonthExpenses }
 
-    var currentMonthBalance: Double {
-        currentMonthIncome - currentMonthExpenses
-    }
-
-    var recentTransactions: [Transaction] {
-        Array(currentMonthTransactions.filter { !$0.isIgnored }.prefix(10))
-    }
+    var recentTransactions: [Transaction] { Array(currentMonthTransactions.prefix(10)) }
 
     var totalBankBalance: Double {
-        bankAccounts
-            .filter { !$0.isExcluded }
-            .reduce(0) { $0 + $1.currentBalance }
+        bankAccounts.filter { !$0.isExcluded }.reduce(0) { $0 + $1.currentBalance }
     }
 
-    // MARK: - Monthly Chart Data (last 6 months)
-
-    var monthlyChartData: [MonthlyData] {
-        var result: [MonthlyData] = []
-        let calendar = Calendar.current
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
-        formatter.locale = Locale(identifier: "it_IT")
-
-        for i in stride(from: 5, through: 0, by: -1) {
-            guard let monthDate = calendar.date(byAdding: .month, value: -i, to: Date()) else { continue }
-            let monthLabel = formatter.string(from: monthDate).capitalized
-
-            let monthTxs = transactions.filter { tx in
-                guard !tx.isIgnored, !tx.isTransfer else { return false }
-                guard let txDate = dateFromString(tx.date) else { return false }
-                return calendar.isDate(txDate, equalTo: monthDate, toGranularity: .month)
-            }
-
-            let income = monthTxs.filter { $0.type == .income }.reduce(0) { $0 + $1.amount }
-            let expenses = monthTxs.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
-
-            result.append(MonthlyData(month: monthLabel, amount: income, type: "Entrate"))
-            result.append(MonthlyData(month: monthLabel, amount: expenses, type: "Uscite"))
-        }
-        return result
-    }
-
-    // MARK: - Category Breakdown (any month)
+    // MARK: - Category Breakdown (on-demand for specific month, e.g. InsightsView)
 
     func expenseCategoryBreakdown(for date: Date) -> [CategoryBreakdown] {
         let calendar = Calendar.current
@@ -276,6 +256,66 @@ class DashboardViewModel: ObservableObject {
             guard let txDate = dateFromString(tx.date) else { return false }
             return calendar.isDate(txDate, equalTo: date, toGranularity: .month)
         }
+        return Self.buildCategoryBreakdown(expenses: expenses)
+    }
+
+    // MARK: - Cache recomputation (triggered by Combine pipeline)
+
+    private func setupDataProcessing() {
+        Publishers.CombineLatest($transactions, $selectedMonthOffset)
+            .debounce(for: .milliseconds(60), scheduler: RunLoop.main)
+            .sink { [weak self] (txs, offset) in
+                self?.recomputeCaches(transactions: txs, monthOffset: offset)
+            }
+            .store(in: &cancellables)
+    }
+
+    private func recomputeCaches(transactions: [Transaction], monthOffset: Int) {
+        let calendar = Calendar.current
+        let ref = calendar.date(byAdding: .month, value: monthOffset, to: Date()) ?? Date()
+
+        // Single pass: filter current month
+        currentMonthTransactions = transactions.filter { tx in
+            guard !tx.isIgnored, !tx.isTransfer else { return false }
+            guard let txDate = dateFromString(tx.date) else { return false }
+            return calendar.isDate(txDate, equalTo: ref, toGranularity: .month)
+        }
+
+        // Monthly chart data — 6 full scans, run on background thread
+        let txsCopy = transactions
+        Task.detached(priority: .userInitiated) {
+            let result = Self.buildMonthlyChartData(transactions: txsCopy)
+            await MainActor.run { [weak self] in self?.monthlyChartData = result }
+        }
+    }
+
+    // Nonisolated so it can run inside Task.detached — creates local formatters (thread-safe)
+    private nonisolated static func buildMonthlyChartData(transactions: [Transaction]) -> [MonthlyData] {
+        let f1 = DateFormatter(); f1.dateFormat = "yyyy-MM-dd"; f1.locale = Locale(identifier: "en_US_POSIX")
+        let f2 = DateFormatter(); f2.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"; f2.locale = Locale(identifier: "en_US_POSIX")
+        let isoF = ISO8601DateFormatter()
+        func parse(_ s: String) -> Date? { f1.date(from: s) ?? f2.date(from: s) ?? isoF.date(from: s) }
+
+        let labelFmt = DateFormatter(); labelFmt.dateFormat = "MMM"; labelFmt.locale = Locale(identifier: "it_IT")
+        let calendar = Calendar.current
+        var result: [MonthlyData] = []
+
+        for i in stride(from: 5, through: 0, by: -1) {
+            guard let monthDate = calendar.date(byAdding: .month, value: -i, to: Date()) else { continue }
+            let label = labelFmt.string(from: monthDate).capitalized
+            var income: Double = 0; var expenses: Double = 0
+            for tx in transactions {
+                guard !tx.isIgnored, !tx.isTransfer else { continue }
+                guard let d = parse(tx.date), calendar.isDate(d, equalTo: monthDate, toGranularity: .month) else { continue }
+                if tx.type == .income { income += tx.amount } else { expenses += tx.amount }
+            }
+            result.append(MonthlyData(month: label, amount: income, type: "Entrate"))
+            result.append(MonthlyData(month: label, amount: expenses, type: "Uscite"))
+        }
+        return result
+    }
+
+    private nonisolated static func buildCategoryBreakdown(expenses: [Transaction]) -> [CategoryBreakdown] {
         let total = expenses.reduce(0) { $0 + $1.amount }
         guard total > 0 else { return [] }
         var grouped: [String: Double] = [:]
@@ -288,10 +328,6 @@ class DashboardViewModel: ObservableObject {
                 percentage: (amount / total) * 100
             )
         }.sorted { $0.amount > $1.amount }
-    }
-
-    var expenseCategoryBreakdown: [CategoryBreakdown] {
-        expenseCategoryBreakdown(for: selectedMonthDate)
     }
 
     // MARK: - Recurring payments (from dedicated collection)
@@ -462,15 +498,9 @@ class DashboardViewModel: ObservableObject {
     }
 
     private func dateFromString(_ string: String) -> Date? {
-        let formatters: [DateFormatter] = {
-            let f1 = DateFormatter(); f1.dateFormat = "yyyy-MM-dd"
-            let f2 = DateFormatter(); f2.dateFormat = "yyyy-MM-dd'T'HH:mm:ss"
-            let f3 = DateFormatter(); f3.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
-            return [f1, f2, f3]
-        }()
-        for f in formatters {
-            if let date = f.date(from: string) { return date }
-        }
-        return ISO8601DateFormatter().date(from: string)
+        if let d = Self._fmtDate.date(from: string) { return d }
+        if let d = Self._fmtDateTime.date(from: string) { return d }
+        if let d = Self._fmtDateTimeTZ.date(from: string) { return d }
+        return Self._fmtISO8601.date(from: string)
     }
 }

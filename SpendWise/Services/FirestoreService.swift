@@ -44,10 +44,44 @@ class FirestoreService: ObservableObject {
 
         if let bankId = transaction.bankTransactionId {
             let docId = "bank_\(bankId)"
-            try await db.collection("transactions").document(docId).setData(data, merge: true)
+            try await db.collection("transactions").document(docId).setData(data)
         } else {
             try await db.collection("transactions").addDocument(data: data)
         }
+    }
+
+    /// Writes up to ~450 transactions per Firestore batch (limit is 500 ops/batch).
+    /// Splits automatically for larger arrays. Uses setData (no merge) for full overwrite/create.
+    func batchAddTransactions(_ transactions: [Transaction]) async throws {
+        guard !transactions.isEmpty else { return }
+        let encoder = Firestore.Encoder()
+        let chunks = stride(from: 0, to: transactions.count, by: 450).map {
+            Array(transactions[$0..<min($0 + 450, transactions.count)])
+        }
+        for chunk in chunks {
+            let batch = db.batch()
+            for tx in chunk {
+                var data = try encoder.encode(tx)
+                data.removeValue(forKey: "id")
+                data["createdAt"] = FieldValue.serverTimestamp()
+                // Always use auto-generated IDs to avoid cross-user document collisions.
+                // Dedup is handled before this call via fetchExistingBankTransactionIds.
+                let ref = db.collection("transactions").document()
+                batch.setData(data, forDocument: ref)
+            }
+            try await batch.commit()
+        }
+    }
+
+    /// Fetches all `bankTransactionId` values already stored for this user (any account/source).
+    /// Used to skip duplicates before a batch import.
+    func fetchExistingBankTransactionIds(userId: String) async throws -> Set<String> {
+        let snapshot = try await db.collection("transactions")
+            .whereField("userId", isEqualTo: userId)
+            .limit(to: 10000)
+            .getDocuments()
+        let ids = snapshot.documents.compactMap { $0.data()["bankTransactionId"] as? String }
+        return Set(ids)
     }
 
     func updateTransaction(id: String, updates: [String: Any]) async throws {
@@ -200,6 +234,51 @@ class FirestoreService: ObservableObject {
         try await db.collection("users").document(userId)
             .collection("bank_sessions")
             .addDocument(data: session)
+    }
+
+    // MARK: - Manual Bank Accounts (CSV import)
+
+    /// Fixed IDs for the Trade Republic manual account so we can find them across imports.
+    static let manualTRDocId = "manual_trade_republic"
+
+    /// Finds or creates a manual (non-Open-Banking) bank session and account for Trade Republic.
+    /// Returns the bank account document ID to use as `accountId` on imported transactions.
+    @discardableResult
+    func findOrCreateManualTRAccount(userId: String) async throws -> String {
+        let docId = FirestoreService.manualTRDocId
+        let userRef = db.collection("users").document(userId)
+
+        // ── Session ─────────────────────────────────────────────────────────
+        let sessionRef = userRef.collection("bank_sessions").document(docId)
+        let sessionSnap = try await sessionRef.getDocument()
+        if !sessionSnap.exists {
+            try await sessionRef.setData([
+                "sessionId":       docId,
+                "institutionName": "Trade Republic",
+                "status":          "MANUAL",
+                "isManual":        true,
+                "createdAt":       ISO8601DateFormatter().string(from: Date()),
+                "aspsp": ["name": "Trade Republic", "country": "EU"]
+            ])
+        }
+
+        // ── Account ──────────────────────────────────────────────────────────
+        let accountRef = userRef.collection("bank_accounts").document(docId)
+        let accountSnap = try await accountRef.getDocument()
+        if !accountSnap.exists {
+            try await accountRef.setData([
+                "id":              docId,
+                "name":            "Trade Republic",
+                "institutionName": "Trade Republic",
+                "sessionId":       docId,
+                "type":            "CACC",
+                "currency":        "EUR",
+                "isManual":        true,
+                "balances":        []
+            ])
+        }
+
+        return docId
     }
 
     func getBankSessions(userId: String) async throws -> [[String: Any]] {

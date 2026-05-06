@@ -10,6 +10,7 @@ struct SettingsView: View {
     @State private var showResetConfirm = false
     @State private var showDeleteImportedConfirm = false
     @State private var showCategoryManager = false
+    @State private var showBilanceImport = false
     @State private var isResetting = false
     @State private var alertMessage: String?
     @State private var showAlert = false
@@ -21,12 +22,16 @@ struct SettingsView: View {
                 aiSettingsSection
                 bankAPISection
                 categoriesSection
+                importSection
                 dataManagementSection
                 aboutSection
             }
             .navigationTitle("Impostazioni")
             .sheet(isPresented: $showCategoryManager) {
                 CategoryManagerView(viewModel: viewModel)
+            }
+            .sheet(isPresented: $showBilanceImport) {
+                BilanceImportView(viewModel: viewModel)
             }
             .alert("Errore", isPresented: $showAlert) {
                 Button("OK") {}
@@ -191,6 +196,31 @@ struct SettingsView: View {
             } label: {
                 Label("Gestisci categorie", systemImage: "tag")
             }
+        }
+    }
+
+    private var importSection: some View {
+        Section("Importa dati") {
+            Button {
+                showBilanceImport = true
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "arrow.down.doc.fill")
+                        .foregroundStyle(Color.appPrimary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Importa da Bilance")
+                            .font(.subheadline)
+                        Text("Importa transazioni via CSV")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .foregroundStyle(.primary)
         }
     }
 
