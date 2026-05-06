@@ -1,9 +1,14 @@
 import SwiftUI
 import Charts
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct BankAccountDetailView: View {
     let account: BankAccount
     @ObservedObject var viewModel: DashboardViewModel
+
+    @State private var copiedLabel: String? = nil
 
     private var accountTransactions: [Transaction] {
         viewModel.transactions
@@ -11,6 +16,7 @@ struct BankAccountDetailView: View {
             .sorted { $0.date > $1.date }
     }
 
+    // isIgnored only affects statistics — for balance ALL transactions are counted.
     private var totalSpent: Double {
         accountTransactions.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
     }
@@ -78,7 +84,7 @@ struct BankAccountDetailView: View {
             // ── Account Details ─────────────────────────────────────
             Section("Dettagli conto") {
                 if let iban = account.officialName, !iban.isEmpty {
-                    detailRow(icon: "creditcard", label: "IBAN / ID", value: iban)
+                    copyableRow(icon: "creditcard", label: "IBAN / ID", value: iban)
                 }
                 detailRow(icon: "tag", label: "Tipo", value: account.accountTypeLabel)
                 detailRow(icon: "dollarsign.circle", label: "Valuta", value: account.displayCurrency)
@@ -163,6 +169,25 @@ struct BankAccountDetailView: View {
         .navigationDestination(for: Transaction.self) { tx in
             TransactionDetailView(transaction: tx, viewModel: viewModel)
         }
+        .overlay(alignment: .bottom) {
+            if let label = copiedLabel {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                    Text("\(label) copiato").font(.subheadline.bold())
+                }
+                .padding(.horizontal, 20).padding(.vertical, 12)
+                .background(.regularMaterial, in: Capsule())
+                .shadow(radius: 6)
+                .padding(.bottom, 20)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation { copiedLabel = nil }
+                    }
+                }
+            }
+        }
+        .animation(.spring(response: 0.35), value: copiedLabel)
     }
 
     // MARK: - Credit Card Plafond
@@ -325,6 +350,38 @@ struct BankAccountDetailView: View {
         .padding(.vertical, 2)
     }
 
+    // MARK: - Copyable Row
+
+    private func copyableRow(icon: String, label: String, value: String) -> some View {
+        Button {
+            #if canImport(UIKit)
+            UIPasteboard.general.string = value
+            #else
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(value, forType: .string)
+            #endif
+            withAnimation { copiedLabel = label }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .foregroundStyle(Color.appPrimary)
+                    .frame(width: 20)
+                Text(label)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(value)
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(.primary)
+                Image(systemName: "doc.on.doc")
+                    .font(.caption)
+                    .foregroundStyle(Color.appPrimary.opacity(0.7))
+            }
+            .font(.subheadline)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Helpers
 
     private func detailRow(icon: String, label: String, value: String) -> some View {
@@ -350,5 +407,17 @@ struct BankAccountDetailView: View {
         display.dateFormat = "MMMM yyyy"
         display.locale = Locale(identifier: "it_IT")
         return display.string(from: date).capitalized
+    }
+}
+
+#Preview("Conto bancario") {
+    NavigationStack {
+        BankAccountDetailView(account: MockData.bankAccount, viewModel: .preview)
+    }
+}
+
+#Preview("Conto manuale TR") {
+    NavigationStack {
+        BankAccountDetailView(account: MockData.manualAccount, viewModel: .preview)
     }
 }

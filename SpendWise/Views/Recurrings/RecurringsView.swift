@@ -1,5 +1,14 @@
 import SwiftUI
 
+// MARK: - Suggestion wrapper (Identifiable for sheet presentation)
+private struct SuggestionItem: Identifiable {
+    let id: String  // = description
+    let description: String
+    let amount: Double
+    let category: String
+    let occurrences: Int
+}
+
 struct RecurringsView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @State private var showAdd = false
@@ -7,6 +16,13 @@ struct RecurringsView: View {
     @State private var itemToDelete: RecurringPayment?
     @State private var showDeleteConfirm = false
     @State private var expandedId: String? = nil
+    @State private var suggestionToConvert: SuggestionItem?
+    @State private var suggestionsExpanded = true
+
+    private var paidIds: Set<String> { viewModel.currentMonthPaidRecurringIds }
+
+    private var paidCount: Int { viewModel.activeRecurrings.filter { paidIds.contains($0.id ?? "") }.count }
+    private var pendingCount: Int { viewModel.activeRecurrings.count - paidCount }
 
     var body: some View {
         NavigationStack {
@@ -23,6 +39,7 @@ struct RecurringsView: View {
                 } else {
                     List {
                         summaryHeader
+                        
                         ForEach(RecurringTiming.allCases) { timing in
                             let items = viewModel.activeRecurrings.filter { $0.recurringTiming == timing }
                             if !items.isEmpty {
@@ -31,6 +48,7 @@ struct RecurringsView: View {
                                         RecurringRowView(
                                             item: item,
                                             isExpanded: expandedId == item.id,
+                                            isPaidThisMonth: paidIds.contains(item.id ?? ""),
                                             linkedTransactions: viewModel.transactions.filter { $0.recurringId == item.id },
                                             onTap: {
                                                 withAnimation { expandedId = expandedId == item.id ? nil : item.id }
@@ -53,6 +71,8 @@ struct RecurringsView: View {
                                 }
                             }
                         }
+                        
+                        suggestedSection
                     }
                 }
             }
@@ -70,6 +90,16 @@ struct RecurringsView: View {
             .sheet(item: $itemToEdit) { item in
                 AddRecurringView(viewModel: viewModel, existing: item)
             }
+            .sheet(item: $suggestionToConvert) { suggestion in
+                AddRecurringView(
+                    viewModel: viewModel,
+                    prefill: AddRecurringView.Prefill(
+                        name: suggestion.description,
+                        amount: suggestion.amount,
+                        category: suggestion.category
+                    )
+                )
+            }
             .confirmationDialog("Eliminare \"\(itemToDelete?.name ?? "")\"?",
                                 isPresented: $showDeleteConfirm, titleVisibility: .visible) {
                 Button("Elimina", role: .destructive) {
@@ -84,22 +114,35 @@ struct RecurringsView: View {
 
     private var summaryHeader: some View {
         Section {
-            HStack(spacing: 0) {
-                summaryTile(
-                    label: "Costo mensile",
-                    value: viewModel.monthlyRecurringCost.euroFormatted,
-                    icon: "calendar",
-                    color: Color.expense
-                )
-                Divider()
-                summaryTile(
-                    label: "Costo annuo",
-                    value: (viewModel.monthlyRecurringCost * 12).euroFormatted,
-                    icon: "star.circle",
-                    color: .appPrimary
-                )
+            VStack(spacing: 10) {
+                HStack(spacing: 0) {
+                    summaryTile(
+                        label: "Costo mensile",
+                        value: viewModel.monthlyRecurringCost.euroFormatted,
+                        icon: "calendar",
+                        color: Color.expense
+                    )
+                    Divider()
+                    summaryTile(
+                        label: "Costo annuo",
+                        value: (viewModel.monthlyRecurringCost * 12).euroFormatted,
+                        icon: "star.circle",
+                        color: .appPrimary
+                    )
+                }
+                .frame(maxWidth: .infinity)
+
+                // Paid / pending pills for the current month
+                if !viewModel.activeRecurrings.isEmpty {
+                    Divider()
+                    HStack(spacing: 12) {
+                        StatusPill(count: paidCount, label: "pagati", icon: "checkmark.circle.fill", color: .green)
+                        StatusPill(count: pendingCount, label: "da pagare", icon: "clock.fill", color: .orange)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 4)
+                }
             }
-            .frame(maxWidth: .infinity)
         }
     }
 
@@ -112,6 +155,98 @@ struct RecurringsView: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 8)
     }
+
+    // MARK: - Suggested subscriptions
+
+    @ViewBuilder
+    private var suggestedSection: some View {
+        // Filter out suggestions that already match an existing recurring by name
+        let existingNames = viewModel.activeRecurrings.map { $0.name.lowercased() }
+        let suggestions = viewModel.suggestedRecurringTransactions.filter { s in
+            let desc = s.description.lowercased()
+            return !existingNames.contains { name in
+                name.contains(desc) || desc.contains(name)
+            }
+        }
+        if !suggestions.isEmpty {
+            Section {
+                if suggestionsExpanded {
+                    ForEach(suggestions, id: \.description) { s in
+                        HStack(spacing: 12) {
+                            CategoryIconView(categoryName: s.category, size: 36, showBackground: true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(s.description)
+                                    .font(.subheadline.bold())
+                                    .lineLimit(1)
+                                Text("\(s.occurrences) volte · \(s.amount.euroFormatted) ca.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button {
+                                suggestionToConvert = SuggestionItem(
+                                    id: s.description,
+                                    description: s.description,
+                                    amount: s.amount,
+                                    category: s.category,
+                                    occurrences: s.occurrences
+                                )
+                            } label: {
+                                Label("Aggiungi", systemImage: "plus.circle")
+                                    .font(.caption.bold())
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .tint(.appPrimary)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+            } header: {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { suggestionsExpanded.toggle() }
+                } label: {
+                    HStack {
+                        Label("Possibili abbonamenti (\(suggestions.count))", systemImage: "wand.and.stars")
+                        Spacer()
+                        Image(systemName: suggestionsExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .textCase(nil)
+            } footer: {
+                if suggestionsExpanded {
+                    Text("Transazioni simili rilevate più mesi — potrebbero essere abbonamenti non tracciati.")
+                        .font(.caption2)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Status Pill
+
+private struct StatusPill: View {
+    let count: Int
+    let label: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.caption).foregroundStyle(color)
+            Text("\(count) \(label)")
+                .font(.caption.bold())
+                .foregroundStyle(count == 0 ? .secondary : color)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(color.opacity(count == 0 ? 0.06 : 0.12))
+        .clipShape(Capsule())
+    }
 }
 
 // MARK: - Recurring Row
@@ -119,6 +254,7 @@ struct RecurringsView: View {
 struct RecurringRowView: View {
     let item: RecurringPayment
     let isExpanded: Bool
+    let isPaidThisMonth: Bool
     let linkedTransactions: [Transaction]
     let onTap: () -> Void
     let onEdit: () -> Void
@@ -158,6 +294,16 @@ struct RecurringRowView: View {
                         Text("≈ \(item.monthlyCost.euroFormatted)/mese")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        // Paid / pending badge for current month
+                        if isPaidThisMonth {
+                            Label("Pagato", systemImage: "checkmark.circle.fill")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.green)
+                        } else {
+                            Label("Da pagare", systemImage: "clock.fill")
+                                .font(.caption2.bold())
+                                .foregroundStyle(.orange)
+                        }
                     }
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption)
@@ -296,4 +442,8 @@ struct LinkTransactionSheet: View {
             }
         }
     }
+}
+
+#Preview {
+    RecurringsView(viewModel: .preview)
 }

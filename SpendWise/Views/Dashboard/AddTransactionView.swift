@@ -347,3 +347,7 @@ struct AddTransactionView: View {
         }
     }
 }
+
+#Preview("Nuova transazione") {
+    AddTransactionView(viewModel: .preview)
+}

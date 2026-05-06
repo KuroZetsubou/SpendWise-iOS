@@ -3,8 +3,12 @@ import SwiftUI
 struct BankSessionDetailView: View {
     let session: BankSession
     @ObservedObject var viewModel: DashboardViewModel
+    var onReconnect: (() -> Void)? = nil
 
     private var isManual: Bool { session.isManual == true }
+    private var isExpired: Bool {
+        !isManual && ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
+    }
 
     private var accountsForSession: [BankAccount] {
         viewModel.resolvedBankAccounts.filter { $0.sessionId == session.sessionId }
@@ -41,6 +45,31 @@ struct BankSessionDetailView: View {
                     Text(isManual ? "Saldo calcolato dalle transazioni" : "\(accountsForSession.count) conti collegati")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    // Expired status badge + reconnect
+                    if isExpired {
+                        VStack(spacing: 8) {
+                            Label("Connessione scaduta", systemImage: "exclamationmark.triangle.fill")
+                                .font(.caption.bold())
+                                .foregroundStyle(.orange)
+                                .padding(.horizontal, 10).padding(.vertical, 4)
+                                .background(Color.orange.opacity(0.12))
+                                .clipShape(Capsule())
+                            if let reconnect = onReconnect {
+                                Button(action: reconnect) {
+                                    Label("Riconnetti", systemImage: "arrow.clockwise.circle.fill")
+                                        .font(.subheadline.bold())
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.orange)
+                                .controlSize(.small)
+                            }
+                        }
+                    } else if let status = session.status {
+                        Text(status == "AUTHORIZED" ? "✓ Attiva" : status)
+                            .font(.caption.bold())
+                            .foregroundStyle(status == "AUTHORIZED" ? Color.income : .secondary)
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -176,5 +205,17 @@ struct BankSessionDetailView: View {
         countryCode.uppercased().unicodeScalars.compactMap {
             UnicodeScalar(127397 + $0.value)
         }.map { String($0) }.joined()
+    }
+}
+
+#Preview("Sessione bancaria") {
+    NavigationStack {
+        BankSessionDetailView(session: MockData.bankSession, viewModel: .preview)
+    }
+}
+
+#Preview("Sessione manuale TR") {
+    NavigationStack {
+        BankSessionDetailView(session: MockData.manualSession, viewModel: .preview)
     }
 }

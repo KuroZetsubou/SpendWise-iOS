@@ -263,7 +263,11 @@ struct TradeRepublicImportView: View {
                     let accessing = url.startAccessingSecurityScopedResource()
                     defer { if accessing { url.stopAccessingSecurityScopedResource() } }
                     let content = try String(contentsOf: url, encoding: .utf8)
-                    let parsed = try TradeRepublicCSVParser.parse(csv: content)
+                    var parsed = try TradeRepublicCSVParser.parse(csv: content)
+                    // Client-side dedup by transactionId + sort descending by date
+                    var seen = Set<String>()
+                    parsed = parsed.filter { seen.insert($0.transactionId).inserted }
+                    parsed.sort { $0.date > $1.date }
                     await MainActor.run { self.parsedTransactions = parsed }
                 } catch {
                     await MainActor.run { self.errorMessage = error.localizedDescription }
@@ -327,4 +331,8 @@ struct TradeRepublicImportView: View {
         isImporting = false
         showResult = true
     }
+}
+
+#Preview {
+    TradeRepublicImportView(viewModel: .preview)
 }

@@ -43,7 +43,7 @@ enum BilanceCSVParser {
         return rows.compactMap { parseLine($0) }
     }
 
-    static func toTransaction(tx: BilanceTx, userId: String) -> Transaction {
+    static func toTransaction(tx: BilanceTx, userId: String, accountId: String? = nil) -> Transaction {
         let (category, subCategory, type, isInternal, isIgnored) = mapCategory(
             bilanceCat: tx.categoria,
             bilanceSub: tx.sottocategoria,
@@ -71,6 +71,7 @@ enum BilanceCSVParser {
             date: dateString
         )
         t.bankTransactionId = bankTransactionId
+        t.accountId = accountId
         t.tags = tx.tag.isEmpty ? nil : [tx.tag]
         t.isInternalTransfer = isInternal ? true : nil
         t.ignored = isIgnored ? true : nil

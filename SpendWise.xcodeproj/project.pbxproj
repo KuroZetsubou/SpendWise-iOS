@@ -18,6 +18,7 @@
 		1F914C0EA518AC360BBA8389 /* CategoryManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED446D2B3C83262610D14F45 /* CategoryManagerView.swift */; };
 		22BEC621E37E38A77C661A61 /* RecurringPayment.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F108F4690959B09A79F482 /* RecurringPayment.swift */; };
 		2A09F913C3403E6B7F58081E /* CategorizationMemoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0513B94913AFBFF297A7F90 /* CategorizationMemoryStore.swift */; };
+		2A92414EBD9D000B0D980D43 /* PreviewHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58585FF57FCD1B82DD77DBE /* PreviewHelpers.swift */; };
 		30601315552483C87C8A1F2B /* BankAccount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DA5E51DD5E3CE47F7C50F79 /* BankAccount.swift */; };
 		30FC7F24C43BFF6837BBBAA4 /* TransactionRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEC131040AE55BCF63558861 /* TransactionRowView.swift */; };
 		3165C620FA0D4FFB22C0854C /* TransactionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC04B02D3C66F3EFC851FE73 /* TransactionDetailView.swift */; };
@@ -36,6 +37,7 @@
 		56F0F1F86BE2AD2CF3554E82 /* InsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454AA477B09FA7F100D903AE /* InsightsView.swift */; };
 		573B688797530FD0F5DF3BEE /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 00C833AA204E4CA13A0568A5 /* GoogleSignIn */; };
 		585FDA19210ABFD1B969F2BC /* TransactionNormalizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 532975906F9D0EED3531E993 /* TransactionNormalizer.swift */; };
+		6070704666A8259477DC13B6 /* PreviewHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58585FF57FCD1B82DD77DBE /* PreviewHelpers.swift */; };
 		63754D9769CA4B6BE244C4BD /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA468EA617DB1F9732CD3A2 /* AIService.swift */; };
 		66BC3EC912729C674C7719C3 /* AIModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2269F87B5BFDE7BE03E5C3B3 /* AIModels.swift */; };
 		69C07B3FCB34A50B11FC5B3B /* AIService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCA468EA617DB1F9732CD3A2 /* AIService.swift */; };
@@ -146,6 +148,7 @@
 		ED446D2B3C83262610D14F45 /* CategoryManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryManagerView.swift; sourceTree = "<group>"; };
 		EEC131040AE55BCF63558861 /* TransactionRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionRowView.swift; sourceTree = "<group>"; };
 		EF3773CAEEB112FD6504DE38 /* CategorizationPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategorizationPipeline.swift; sourceTree = "<group>"; };
+		F58585FF57FCD1B82DD77DBE /* PreviewHelpers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewHelpers.swift; sourceTree = "<group>"; };
 		F5CEEC8B0015A98B3CFDBB4A /* StatCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatCardView.swift; sourceTree = "<group>"; };
 		FA3ED697CE61BF1855FFB654 /* TransactionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -303,6 +306,7 @@
 				C08CF975C2BBCD1D8681BDCF /* ContentView.swift */,
 				04A04E754E87F2DAB386F14C /* GoogleService-Info.plist */,
 				E9BCDA84E707D68B19CB31B0 /* Info.plist */,
+				F58585FF57FCD1B82DD77DBE /* PreviewHelpers.swift */,
 				D0C25E5CFECA71856393A9AA /* SpendWise.entitlements */,
 				E04C4117C178596B46A4BAC1 /* SpendWiseApp.swift */,
 				6E13595AABB99737C240AC60 /* Models */,
@@ -499,6 +503,7 @@
 				EA4C5AB79441E9352628D7A9 /* Formatters.swift in Sources */,
 				812B37AAC72BCECD394F5DAA /* InsightsView.swift in Sources */,
 				82CB0E15449F25A8CA9006D9 /* LoginView.swift in Sources */,
+				2A92414EBD9D000B0D980D43 /* PreviewHelpers.swift in Sources */,
 				E1A59328F937EB8E80EF5DDA /* RecurringPayment.swift in Sources */,
 				0152A0436F86971150E4313E /* RecurringsView.swift in Sources */,
 				D2362A9C096DE3F995FBB3C4 /* SettingsView.swift in Sources */,
@@ -547,6 +552,7 @@
 				9E9E8C38E29E433BEB83C990 /* Formatters.swift in Sources */,
 				56F0F1F86BE2AD2CF3554E82 /* InsightsView.swift in Sources */,
 				01D8D7DAE0AF3A54CA384A98 /* LoginView.swift in Sources */,
+				6070704666A8259477DC13B6 /* PreviewHelpers.swift in Sources */,
 				22BEC621E37E38A77C661A61 /* RecurringPayment.swift in Sources */,
 				42C14AEAFAAD8A54F607AF3C /* RecurringsView.swift in Sources */,
 				4FE7944C1E25DA8F6065097F /* SettingsView.swift in Sources */,

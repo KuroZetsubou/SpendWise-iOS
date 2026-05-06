@@ -58,3 +58,14 @@ struct TransactionRowView: View {
     }
 }
 
+
+#Preview {
+    VStack(spacing: 0) {
+        TransactionRowView(transaction: MockData.transactions[0])
+        Divider()
+        TransactionRowView(transaction: MockData.transactions[1])
+        Divider()
+        TransactionRowView(transaction: MockData.transactions[4])
+    }
+    .padding(.horizontal)
+}

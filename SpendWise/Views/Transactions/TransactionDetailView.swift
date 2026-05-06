@@ -6,6 +6,7 @@ struct TransactionDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
+    @State private var showLinkRecurring = false
 
     private var bankAccount: BankAccount? {
         guard let aid = transaction.accountId else { return nil }
@@ -140,16 +141,28 @@ struct TransactionDetailView: View {
                 }
 
                 // ── Recurring ────────────────────────────────────────────────
-                if transaction.recurring == true {
-                    Section("Ricorrenza") {
-                        if let rid = transaction.recurringId,
-                           let rec = viewModel.recurrings.first(where: { $0.id == rid }) {
-                            detailRow(icon: "repeat.circle.fill", label: "Abbonamento", value: rec.name)
-                            detailRow(icon: rec.recurringTiming.systemImage, label: "Frequenza", value: rec.recurringTiming.label)
-                        } else {
+                Section("Abbonamento") {
+                    if let rid = transaction.recurringId,
+                       let rec = viewModel.recurrings.first(where: { $0.id == rid }) {
+                        detailRow(icon: "repeat.circle.fill", label: "Abbonamento", value: rec.name)
+                        detailRow(icon: rec.recurringTiming.systemImage, label: "Frequenza", value: rec.recurringTiming.label)
+                        Button(role: .destructive) {
+                            Task { await viewModel.unlinkTransaction(recurringId: rid, transactionId: transaction.id ?? "") }
+                        } label: {
+                            Label("Scollega da \(rec.name)", systemImage: "link.badge.minus")
+                                .font(.subheadline)
+                        }
+                    } else {
+                        if transaction.recurring == true {
                             let freq = transaction.recurringFrequency
                             detailRow(icon: "repeat", label: "Frequenza",
                                       value: freq == .weekly ? "Settimanale" : freq == .yearly ? "Annuale" : "Mensile")
+                        }
+                        Button {
+                            showLinkRecurring = true
+                        } label: {
+                            Label("Aggiungi ad abbonamento", systemImage: "link.badge.plus")
+                                .font(.subheadline)
                         }
                     }
                 }
@@ -213,6 +226,9 @@ struct TransactionDetailView: View {
         .sheet(isPresented: $showEdit) {
             AddTransactionView(viewModel: viewModel, existingTransaction: transaction)
         }
+        .sheet(isPresented: $showLinkRecurring) {
+            LinkToRecurringSheet(transaction: transaction, viewModel: viewModel)
+        }
         .confirmationDialog("Eliminare questa transazione?",
                             isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Elimina", role: .destructive) {
@@ -241,5 +257,100 @@ struct TransactionDetailView: View {
                 .foregroundStyle(.primary)
         }
         .font(.subheadline)
+    }
+}
+
+// MARK: - Link to Recurring Sheet
+
+struct LinkToRecurringSheet: View {
+    let transaction: Transaction
+    @ObservedObject var viewModel: DashboardViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var showNewRecurring = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if viewModel.activeRecurrings.isEmpty {
+                    ContentUnavailableView {
+                        Label("Nessun abbonamento", systemImage: "repeat.circle")
+                    } description: {
+                        Text("Crea un abbonamento per collegare questa transazione.")
+                    }
+                } else {
+                    Section("Seleziona abbonamento") {
+                        ForEach(viewModel.activeRecurrings) { rec in
+                            Button {
+                                Task {
+                                    await viewModel.linkTransaction(recurringId: rec.id ?? "", transactionId: transaction.id ?? "")
+                                    dismiss()
+                                }
+                            } label: {
+                                HStack(spacing: 12) {
+                                    CategoryIconView(categoryName: rec.category, size: 36, showBackground: true)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(rec.name)
+                                            .font(.subheadline.bold())
+                                            .foregroundStyle(.primary)
+                                        HStack(spacing: 4) {
+                                            Image(systemName: rec.recurringTiming.systemImage)
+                                                .font(.caption2)
+                                            Text(rec.recurringTiming.label)
+                                                .font(.caption)
+                                        }
+                                        .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text(rec.amount.euroFormatted)
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(Color.expense)
+                                }
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                Section {
+                    Button {
+                        showNewRecurring = true
+                    } label: {
+                        Label("Crea nuovo abbonamento", systemImage: "plus.circle.fill")
+                    }
+                }
+            }
+            .navigationTitle("Collega ad abbonamento")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Annulla") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showNewRecurring) {
+                AddRecurringView(
+                    viewModel: viewModel,
+                    prefill: AddRecurringView.Prefill(
+                        name: transaction.description,
+                        amount: transaction.amount,
+                        category: transaction.category
+                    )
+                )
+            }
+        }
+    }
+}
+
+#Preview("Dettaglio — Spesa") {
+    NavigationStack {
+        TransactionDetailView(transaction: MockData.transactions[1], viewModel: .preview)
+    }
+}
+
+#Preview("Dettaglio — Import TR") {
+    NavigationStack {
+        TransactionDetailView(transaction: MockData.transactions[4], viewModel: .preview)
     }
 }

@@ -3,6 +3,13 @@ import SwiftUI
 struct AddRecurringView: View {
     @ObservedObject var viewModel: DashboardViewModel
     var existing: RecurringPayment? = nil
+    var prefill: Prefill? = nil
+
+    struct Prefill {
+        var name: String
+        var amount: Double
+        var category: String
+    }
 
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
@@ -109,18 +116,23 @@ struct AddRecurringView: View {
     }
 
     private func populate() {
-        guard let e = existing else {
+        if let e = existing {
+            name = e.name
+            amountString = String(format: "%.2f", e.amount).replacingOccurrences(of: ".", with: ",")
+            selectedType = e.type
+            selectedCategory = e.category
+            selectedTiming = e.recurringTiming
+            recurringDay = e.recurringDate
+            notes = e.notes ?? ""
+            isActive = e.isActive
+        } else if let p = prefill {
+            name = p.name
+            amountString = String(format: "%.2f", p.amount).replacingOccurrences(of: ".", with: ",")
+            selectedCategory = p.category
+            selectedCategory = availableCategories.first(where: { $0.name == p.category })?.name ?? (availableCategories.first?.name ?? "")
+        } else {
             selectedCategory = availableCategories.first?.name ?? ""
-            return
         }
-        name = e.name
-        amountString = String(format: "%.2f", e.amount).replacingOccurrences(of: ".", with: ",")
-        selectedType = e.type
-        selectedCategory = e.category
-        selectedTiming = e.recurringTiming
-        recurringDay = e.recurringDate
-        notes = e.notes ?? ""
-        isActive = e.isActive
     }
 
     private func save() async {
@@ -158,4 +170,12 @@ struct AddRecurringView: View {
         }
         dismiss()
     }
+}
+
+#Preview("Nuovo ricorrente") {
+    AddRecurringView(viewModel: .preview)
+}
+
+#Preview("Modifica ricorrente") {
+    AddRecurringView(viewModel: .preview, existing: MockData.recurrings[0])
 }

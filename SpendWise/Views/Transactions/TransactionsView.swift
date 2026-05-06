@@ -264,3 +264,7 @@ struct TransactionsView: View {
         showBatchDone = true
     }
 }
+
+#Preview {
+    TransactionsView(viewModel: .preview)
+}

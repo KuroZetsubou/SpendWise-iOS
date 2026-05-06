@@ -316,6 +316,8 @@ struct InsightsView: View {
                 }
             }
         }
+        .cardStyle()
+        .padding(.horizontal)
         .padding(.bottom, 8)
     }
 }
@@ -357,3 +359,6 @@ struct InsightCardView: View {
 }
 
 
+#Preview {
+    InsightsView(viewModel: .preview)
+}

@@ -86,6 +86,17 @@ struct DashboardView: View {
                         .font(.caption.bold())
                         .foregroundStyle(viewModel.currentMonthBalance >= 0 ? Color.income : Color.expense)
                 }
+                // Projected end-of-month balance (only for current month, only if recurrings exist)
+                if viewModel.isCurrentMonth && !viewModel.activeRecurrings.isEmpty {
+                    let projected = viewModel.projectedMonthEndBalance
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.caption2)
+                        Text("previsto fine mese: \(projected.euroFormatted)")
+                            .font(.caption2)
+                    }
+                    .foregroundStyle(projected >= 0 ? Color.income.opacity(0.8) : Color.expense.opacity(0.8))
+                }
             }
             .frame(maxWidth: .infinity)
 
@@ -250,4 +261,8 @@ struct DashboardView: View {
         }
         .padding(.bottom, 8)
     }
+}
+
+#Preview {
+    DashboardView(viewModel: .preview)
 }

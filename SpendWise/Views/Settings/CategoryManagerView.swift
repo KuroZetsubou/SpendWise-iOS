@@ -326,3 +326,7 @@ struct AddCategoryView: View {
         dismiss()
     }
 }
+
+#Preview {
+    CategoryManagerView(viewModel: .preview)
+}

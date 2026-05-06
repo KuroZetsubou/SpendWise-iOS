@@ -35,6 +35,22 @@ class DashboardViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var selectedTab: Tab = .dashboard
 
+    /// Transient toast messages for non-critical Firestore events (auto-dismiss in views)
+    @Published var toastMessage: ToastMessage? = nil
+
+    struct ToastMessage: Identifiable, Equatable {
+        enum Kind { case success, error, info }
+        let id = UUID()
+        let text: String
+        let kind: Kind
+    }
+
+    func showToast(_ text: String, kind: ToastMessage.Kind = .info) {
+        Task { @MainActor in
+            toastMessage = ToastMessage(text: text, kind: kind)
+        }
+    }
+
     enum Tab: Int, CaseIterable {
         case dashboard = 0, transactions, insights, bank, settings
         var title: String {
@@ -133,9 +149,10 @@ class DashboardViewModel: ObservableObject {
                let session = bankSessions.first(where: { $0.sessionId == sid }) {
                 r.institutionName = session.displayInstitutionName
             }
-            // For manual accounts, compute balance live from linked transactions
+            // For manual accounts, compute balance live from linked transactions.
+            // isIgnored only affects statistics — ALL transactions count toward the balance.
             if r.isManual == true {
-                let linked = transactions.filter { $0.accountId == r.id && $0.ignored != true }
+                let linked = transactions.filter { $0.accountId == r.id }
                 let income  = linked.filter { $0.type == .income  }.reduce(0) { $0 + $1.amount }
                 let expense = linked.filter { $0.type == .expense }.reduce(0) { $0 + $1.amount }
                 r.calculatedBalance = income - expense
@@ -244,7 +261,7 @@ class DashboardViewModel: ObservableObject {
     var recentTransactions: [Transaction] { Array(currentMonthTransactions.prefix(10)) }
 
     var totalBankBalance: Double {
-        bankAccounts.filter { !$0.isExcluded }.reduce(0) { $0 + $1.currentBalance }
+        resolvedBankAccounts.filter { !$0.isExcluded }.reduce(0) { $0 + $1.currentBalance }
     }
 
     // MARK: - Category Breakdown (on-demand for specific month, e.g. InsightsView)
@@ -339,6 +356,66 @@ class DashboardViewModel: ObservableObject {
             .reduce(0) { $0 + $1.monthlyCost }
     }
 
+    /// Projected balance at end of current month:
+    /// = (current month income − expenses) ± remaining unpaid recurrings.
+    var projectedMonthEndBalance: Double {
+        guard isCurrentMonth else { return currentMonthBalance }
+        let paid = currentMonthPaidRecurringIds
+        let unpaidExpenses = activeRecurrings
+            .filter { $0.type == .expense && !paid.contains($0.id ?? "") }
+            .reduce(0) { $0 + $1.monthlyCost }
+        let unpaidIncome = activeRecurrings
+            .filter { $0.type == .income && !paid.contains($0.id ?? "") }
+            .reduce(0) { $0 + $1.monthlyCost }
+        return currentMonthBalance - unpaidExpenses + unpaidIncome
+    }
+
+    /// IDs of active recurrings that have at least one linked transaction in the current calendar month.
+    var currentMonthPaidRecurringIds: Set<String> {
+        let cal = Calendar.current
+        let now = Date()
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd"
+        df.locale = Locale(identifier: "en_US_POSIX")
+        return Set(transactions.compactMap { tx -> String? in
+            guard let rid = tx.recurringId,
+                  let date = df.date(from: String(tx.date.prefix(10))),
+                  cal.isDate(date, equalTo: now, toGranularity: .month) else { return nil }
+            return rid
+        })
+    }
+
+    /// Transactions that appear to be recurring (same description in 2+ different months, similar amounts) but not yet linked to any recurring payment.
+    var suggestedRecurringTransactions: [(description: String, amount: Double, category: String, occurrences: Int)] {
+        let unlinked = transactions.filter { $0.recurringId == nil && $0.type == .expense && !$0.description.isEmpty }
+        var groups: [String: [Transaction]] = [:]
+        for tx in unlinked {
+            let key = tx.description.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !key.isEmpty else { continue }
+            groups[key, default: []].append(tx)
+        }
+        let df = DateFormatter()
+        df.dateFormat = "yyyy-MM-dd"
+        df.locale = Locale(identifier: "en_US_POSIX")
+        let cal = Calendar.current
+        return groups.compactMap { (_, txs) -> (String, Double, String, Int)? in
+            guard txs.count >= 2 else { return nil }
+            let months = Set(txs.compactMap { tx -> String? in
+                guard let d = df.date(from: String(tx.date.prefix(10))) else { return nil }
+                return "\(cal.component(.year, from: d))-\(cal.component(.month, from: d))"
+            })
+            guard months.count >= 2 else { return nil }
+            // Only suggest if amounts are within 10% of each other
+            let avg = txs.reduce(0) { $0 + $1.amount } / Double(txs.count)
+            guard avg > 0, txs.allSatisfy({ abs($0.amount - avg) / avg < 0.15 }) else { return nil }
+            let sorted = txs.sorted { $0.date > $1.date }
+            return (sorted[0].description, sorted[0].amount, sorted[0].category, txs.count)
+        }
+        .sorted { $0.3 > $1.3 }
+        .prefix(5)
+        .map { $0 }
+    }
+
     func addRecurring(_ recurring: RecurringPayment) async {
         guard let userId = userId else { return }
         var r = recurring
@@ -396,24 +473,30 @@ class DashboardViewModel: ObservableObject {
     func addTransaction(_ transaction: Transaction) async {
         do {
             try await firestoreService.addTransaction(transaction)
+            showToast("Transazione salvata", kind: .success)
         } catch {
             errorMessage = "Errore aggiunta transazione: \(error.localizedDescription)"
+            showToast("Errore salvataggio: \(error.localizedDescription)", kind: .error)
         }
     }
 
     func updateTransaction(id: String, updates: [String: Any]) async {
         do {
             try await firestoreService.updateTransaction(id: id, updates: updates)
+            showToast("Transazione aggiornata", kind: .success)
         } catch {
             errorMessage = "Errore aggiornamento transazione: \(error.localizedDescription)"
+            showToast("Errore aggiornamento: \(error.localizedDescription)", kind: .error)
         }
     }
 
     func deleteTransaction(id: String) async {
         do {
             try await firestoreService.deleteTransaction(id: id)
+            showToast("Transazione eliminata", kind: .info)
         } catch {
             errorMessage = "Errore eliminazione transazione: \(error.localizedDescription)"
+            showToast("Errore eliminazione: \(error.localizedDescription)", kind: .error)
         }
     }
 

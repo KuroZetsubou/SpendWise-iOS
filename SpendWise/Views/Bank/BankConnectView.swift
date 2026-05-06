@@ -239,7 +239,9 @@ struct BankConnectView: View {
             }
             .navigationTitle("Banca")
             .navigationDestination(for: BankSession.self) { session in
-                BankSessionDetailView(session: session, viewModel: viewModel)
+                BankSessionDetailView(session: session, viewModel: viewModel) {
+                    Task { await reconnectSession(session) }
+                }
             }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -540,7 +542,7 @@ struct BankConnectView: View {
     /// Returns the auth code once the user completes the flow and is redirected back.
     private func startBankAuth(aspspName: String, country: String) async throws -> String {
         // Use spendwise://callback as redirect — iOS intercepts it and calls onOpenURL
-        let redirectURL = "spendwise://callback"
+        let redirectURL = "https://kurozetsubou.github.io/spendwise-callback/"
         let authURL = try await bankService.initiateLink(
             aspspName: aspspName,
             country: country,
@@ -549,7 +551,11 @@ struct BankConnectView: View {
         guard let url = URL(string: authURL) else { throw URLError(.badURL) }
 
         // Open in external Safari (works with banks that block in-app browsers)
+        #if canImport(UIKit)
         await UIApplication.shared.open(url)
+        #else
+        NSWorkspace.shared.open(url)
+        #endif
 
         // Wait for spendwise://callback?code=... from AuthCallbackHandler
         return try await AuthCallbackHandler.shared.waitForCode(timeout: 300)

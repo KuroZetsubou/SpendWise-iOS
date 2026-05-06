@@ -15,6 +15,8 @@ struct BilanceImportView: View {
     @State private var errorMessage: String?
     @State private var skipInternalTransfers = true
     @State private var skipIgnored = true
+    /// Conto name → bankAccount ID (empty = non assegnato)
+    @State private var contoMappings: [String: String] = [:]
 
     struct ImportResult {
         var imported: Int
@@ -22,12 +24,18 @@ struct BilanceImportView: View {
         var errors: [String]
     }
 
+    private var uniqueConti: [String] {
+        Array(Set(parsedTransactions.map { $0.conto }.filter { !$0.isEmpty })).sorted()
+    }
+
     private var filteredTransactions: [BilanceCSVParser.BilanceTx] {
-        parsedTransactions.filter { tx in
-            if skipInternalTransfers && tx.categoria == "Giroconti" { return false }
-            if skipIgnored && tx.categoria == "Escluso" { return false }
-            return true
-        }
+        parsedTransactions
+            .filter { tx in
+                if skipInternalTransfers && tx.categoria == "Giroconti" { return false }
+                if skipIgnored && tx.categoria == "Escluso" { return false }
+                return true
+            }
+            .sorted { $0.data > $1.data }
     }
 
     var body: some View {
@@ -61,6 +69,36 @@ struct BilanceImportView: View {
                 Section("Opzioni importazione") {
                     Toggle("Escludi giroconti interni", isOn: $skipInternalTransfers)
                     Toggle("Escludi transazioni ignorate", isOn: $skipIgnored)
+                }
+
+                // ── Conto mapping ─────────────────────────────────────
+                if !uniqueConti.isEmpty {
+                    Section {
+                        ForEach(uniqueConti, id: \.self) { conto in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(conto)
+                                    .font(.subheadline.bold())
+                                    .lineLimit(1)
+                                Picker("Conto SpendWise", selection: Binding(
+                                    get: { contoMappings[conto] ?? "" },
+                                    set: { contoMappings[conto] = $0 }
+                                )) {
+                                    Text("— Non assegnato —").tag("")
+                                    ForEach(viewModel.resolvedBankAccounts) { acc in
+                                        Text(acc.displayName).tag(acc.id ?? "")
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .font(.caption)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    } header: {
+                        Label("Associa conti Bilance", systemImage: "building.columns")
+                    } footer: {
+                        Text("Associa ogni conto Bilance a un conto SpendWise per raggruppare le transazioni.")
+                            .font(.caption2)
+                    }
                 }
 
                 // ── Import button ─────────────────────────────────────
@@ -250,7 +288,10 @@ struct BilanceImportView: View {
 
     private func importTransactions() async {
         guard let userId = viewModel.userId else { return }
-        let toImport = filteredTransactions.map { BilanceCSVParser.toTransaction(tx: $0, userId: userId) }
+        let toImport = filteredTransactions.map { tx -> Transaction in
+            let accountId = contoMappings[tx.conto].flatMap { $0.isEmpty ? nil : $0 }
+            return BilanceCSVParser.toTransaction(tx: tx, userId: userId, accountId: accountId)
+        }
         importTotal = toImport.count
         importProgress = 0
         isImporting = true
@@ -268,6 +309,7 @@ struct BilanceImportView: View {
                 importProgress = Double(done) / Double(max(toImport.count, 1))
             }
             parsedTransactions = []
+            contoMappings = [:]
             importProgress = 1.0
             importResult = ImportResult(imported: done, skipped: 0, errors: [])
         } catch {
@@ -277,4 +319,8 @@ struct BilanceImportView: View {
         isImporting = false
         showResult = true
     }
+}
+
+#Preview {
+    BilanceImportView(viewModel: .preview)
 }
