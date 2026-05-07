@@ -42,31 +42,31 @@ struct TradeRepublicImportView: View {
                 }
 
                 // ── Option 1: Enable Banking ──────────────────────────
-                Section {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label("Via Open Banking (Consigliato)", systemImage: "link.circle.fill")
-                            .font(.subheadline.bold())
-                            .foregroundStyle(Color.appPrimary)
-                        Text("Trade Republic ha una licenza bancaria PSD2. Puoi collegarlo direttamente come qualsiasi altra banca:")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 8) {
-                            stepBadge("1", "Vai in Banca")
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            stepBadge("2", "🇩🇪 Germania")
-                            Image(systemName: "chevron.right")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            stepBadge("3", "\"Trade Republic\"")
-                        }
-                        .font(.caption2)
-                    }
-                    .padding(.vertical, 4)
-                } header: {
-                    Text("Opzione 1 — Connessione diretta")
-                }
+//                Section {
+//                    VStack(alignment: .leading, spacing: 10) {
+//                        Label("Via Open Banking (Consigliato)", systemImage: "link.circle.fill")
+//                            .font(.subheadline.bold())
+//                            .foregroundStyle(Color.appPrimary)
+//                        Text("Trade Republic ha una licenza bancaria PSD2. Puoi collegarlo direttamente come qualsiasi altra banca:")
+//                            .font(.caption)
+//                            .foregroundStyle(.secondary)
+//                        HStack(spacing: 8) {
+//                            stepBadge("1", "Vai in Banca")
+//                            Image(systemName: "chevron.right")
+//                                .font(.caption2)
+//                                .foregroundStyle(.secondary)
+//                            stepBadge("2", "🇩🇪 Germania")
+//                            Image(systemName: "chevron.right")
+//                                .font(.caption2)
+//                                .foregroundStyle(.secondary)
+//                            stepBadge("3", "\"Trade Republic\"")
+//                        }
+//                        .font(.caption2)
+//                    }
+//                    .padding(.vertical, 4)
+//                } header: {
+//                    Text("Opzione 1 — Connessione diretta")
+//                }
 
                 // ── Option 2: CSV Import ──────────────────────────────
                 Section {
@@ -83,28 +83,55 @@ struct TradeRepublicImportView: View {
                             .foregroundStyle(.red)
                     }
 
-                    Button {
-                        showFilePicker = true
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if isImporting {
-                                ProgressView()
-                                    .padding(.trailing, 4)
-                                Text("Importazione...")
-                            } else {
-                                Label("Seleziona file CSV", systemImage: "doc.text.badge.plus")
-                                    .font(.subheadline.bold())
+                    if #available(iOS 26.0, *) {
+                        
+                        Button {
+                            showFilePicker = true
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if isImporting {
+                                    ProgressView()
+                                        .padding(.trailing, 4)
+                                    Text("Importazione...")
+                                } else {
+                                    Label("Seleziona file CSV", systemImage: "doc.text.badge.plus")
+                                        .font(.subheadline.bold())
+                                }
+                                Spacer()
                             }
-                            Spacer()
+                            .padding(.vertical, 4)
+                            
                         }
-                        .padding(.vertical, 4)
+                        .buttonStyle(.glassProminent)
+                        .disabled(isImporting || viewModel.userId == nil)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isImporting || viewModel.userId == nil)
+                    else
+                    {
+                        Button {
+                            showFilePicker = true
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if isImporting {
+                                    ProgressView()
+                                        .padding(.trailing, 4)
+                                    Text("Importazione...")
+                                } else {
+                                    Label("Seleziona file CSV", systemImage: "doc.text.badge.plus")
+                                        .font(.subheadline.bold())
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                            
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isImporting || viewModel.userId == nil)
+                    }
 
                 } header: {
-                    Text("Opzione 2 — Importa CSV")
+                    Text("Importa CSV")
                 }
 
                 // ── Preview ───────────────────────────────────────────

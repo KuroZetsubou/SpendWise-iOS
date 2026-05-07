@@ -28,6 +28,7 @@ struct InsightsView: View {
                     monthNavigator
                     expensePieChart
                     monthlySavingsSection
+                    InsightsCalendarView(viewModel: viewModel, month: selectedDate)
                     categoryListSection
                     recurringSection
                     aiInsightsSection

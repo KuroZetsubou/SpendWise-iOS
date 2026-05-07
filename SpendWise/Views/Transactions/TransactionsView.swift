@@ -1,7 +1,13 @@
 import SwiftUI
 
 struct TransactionsView: View {
+    enum TxViewMode: String, CaseIterable {
+        case list = "Lista"
+        case calendar = "Calendario"
+    }
+
     @ObservedObject var viewModel: DashboardViewModel
+    @State private var txViewMode: TxViewMode = .list
     @State private var searchText = ""
     @State private var selectedTypeFilter: Transaction.TransactionType? = nil
     @State private var selectedCategoryFilter: String? = nil
@@ -19,7 +25,9 @@ struct TransactionsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if cachedFiltered.isEmpty && searchText.isEmpty {
+                if txViewMode == .calendar {
+                    RecurringCalendarView(viewModel: viewModel)
+                } else if cachedFiltered.isEmpty && searchText.isEmpty {
                     ContentUnavailableView {
                         Label("Nessuna transazione", systemImage: "tray")
                     } description: {
@@ -29,30 +37,7 @@ struct TransactionsView: View {
                             .buttonStyle(.borderedProminent)
                     }
                 } else {
-                    List {
-                        ForEach(cachedGrouped.keys.sorted().reversed(), id: \.self) { month in
-                            Section(header: monthSectionHeader(month: month)) {
-                                ForEach(cachedGrouped[month] ?? []) { tx in
-                                    NavigationLink(value: tx) {
-                                        TransactionRowView(
-                                            transaction: tx,
-                                            onDelete: {
-                                                transactionToDelete = tx
-                                                showDeleteConfirm = true
-                                            },
-                                            onEdit: { transactionToEdit = tx }
-                                        )
-                                    }
-                                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
-                                }
-                            }
-                        }
-                    }
-                    #if os(iOS)
-                    .listStyle(.insetGrouped)
-                    #else
-                    .listStyle(.inset)
-                    #endif
+                    transactionsList
                 }
             }
             .navigationDestination(for: Transaction.self) { tx in
@@ -65,32 +50,21 @@ struct TransactionsView: View {
             .onChange(of: searchText) { _, _ in updateCaches() }
             .onChange(of: selectedTypeFilter) { _, _ in updateCaches() }
             .onChange(of: selectedCategoryFilter) { _, _ in updateCaches() }
-            .overlay {
-                if isBatchCategorizing {
-                    ZStack {
-                        Color.black.opacity(0.35).ignoresSafeArea()
-                        VStack(spacing: 16) {
-                            ProgressView(value: batchProgress.total > 0 ? Double(batchProgress.done) / Double(batchProgress.total) : 0)
-                                .progressViewStyle(.linear)
-                                .frame(width: 220)
-                            Text("Categorizzazione AI…")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                            Text("\(batchProgress.done) / \(batchProgress.total)")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-                        .padding(24)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    }
-                }
-            }
+            .overlay { batchCategorizingOverlay }
             .alert("Categorizzazione completata", isPresented: $showBatchDone) {
                 Button("OK") {}
             } message: {
                 Text("Aggiornate \(batchProgress.done) transazioni.")
             }
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("Vista", selection: $txViewMode) {
+                        Text("Lista").tag(TxViewMode.list)
+                        Text("Calendario").tag(TxViewMode.calendar)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showAddTransaction = true
@@ -100,32 +74,7 @@ struct TransactionsView: View {
                     }
                 }
                 ToolbarItem(placement: .secondaryAction) {
-                    Menu {
-                        Section("Filtra per tipo") {
-                            Button("Tutte") { selectedTypeFilter = nil }
-                            Button("Entrate") { selectedTypeFilter = .income }
-                            Button("Uscite") { selectedTypeFilter = .expense }
-                        }
-                        if !cachedCategories.isEmpty {
-                            Section("Filtra per categoria") {
-                                Button("Tutte") { selectedCategoryFilter = nil }
-                                ForEach(cachedCategories, id: \.self) { cat in
-                                    Button(cat) { selectedCategoryFilter = cat }
-                                }
-                            }
-                        }
-                        Section("AI") {
-                            Button {
-                                Task { await runBatchCategorization() }
-                            } label: {
-                                let n = viewModel.transactions.filter { $0.category.isEmpty || $0.category == "Altro" }.count
-                                Label(n > 0 ? "Categorizza \(n) non categorizzate" : "Tutte già categorizzate", systemImage: "apple.intelligence")
-                            }
-                            .disabled(isBatchCategorizing || viewModel.transactions.filter { $0.category.isEmpty || $0.category == "Altro" }.isEmpty)
-                        }
-                    } label: {
-                        Image(systemName: hasActiveFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                    }
+                    txFilterMenu
                 }
             }
             .sheet(isPresented: $showAddTransaction) {
@@ -150,15 +99,113 @@ struct TransactionsView: View {
                     Text(tx.description.isEmpty ? tx.category : tx.description)
                 }
             }
-            .alert("Errore", isPresented: .init(
-                get: { viewModel.errorMessage != nil },
-                set: { if !$0 { viewModel.dismissError() } }
-            )) {
+            .alert("Errore", isPresented: errorBinding) {
                 Button("OK") { viewModel.dismissError() }
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
         }
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.dismissError() } }
+        )
+    }
+
+    @ViewBuilder private var txFilterMenu: some View {
+        let uncatCount = viewModel.transactions.filter { $0.category.isEmpty || $0.category == "Altro" }.count
+        Menu {
+            Section("Filtra per tipo") {
+                Button("Tutte") { selectedTypeFilter = nil }
+                Button("Entrate") { selectedTypeFilter = .income }
+                Button("Uscite") { selectedTypeFilter = .expense }
+            }
+            if !cachedCategories.isEmpty {
+                Section("Filtra per categoria") {
+                    Button("Tutte") { selectedCategoryFilter = nil }
+                    ForEach(cachedCategories, id: \.self) { cat in
+                        Button(cat) { selectedCategoryFilter = cat }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: hasActiveFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
+        }
+
+        Button {
+            Task { await runBatchCategorization() }
+        } label: {
+            Label(
+                uncatCount > 0 ? "Categorizza \(uncatCount)" : "Tutte già categorizzate",
+                systemImage: "apple.intelligence"
+            )
+        }
+        .disabled(isBatchCategorizing || uncatCount == 0)
+    }
+
+    private var sortedMonthKeys: [String] {
+        cachedGrouped.keys.sorted().reversed() as [String]
+    }
+
+    @ViewBuilder private var transactionsList: some View {
+        List {
+            ForEach(sortedMonthKeys, id: \.self) { month in
+                Section(header: monthSectionHeader(month: month)) {
+                    let rows = cachedGrouped[month] ?? []
+                    ForEach(rows) { tx in
+                        transactionRow(tx)
+                    }
+                }
+            }
+        }
+        #if os(iOS)
+        .listStyle(.insetGrouped)
+        #else
+        .listStyle(.inset)
+        #endif
+    }
+
+    // MARK: - Batch overlay
+
+    @ViewBuilder private var batchCategorizingOverlay: some View {
+        if isBatchCategorizing {
+            let progress = batchProgress.total > 0 ? Double(batchProgress.done) / Double(batchProgress.total) : 0.0
+            let label = "\(batchProgress.done) / \(batchProgress.total)"
+            ZStack {
+                Color.black.opacity(0.35).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    ProgressView(value: progress)
+                        .progressViewStyle(.linear)
+                        .frame(width: 220)
+                    Text("Categorizzazione AI…")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                    Text(label)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                .padding(24)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }
+        }
+    }
+
+    // MARK: - Row builder (extracted to help the Swift type-checker)
+
+    private func transactionRow(_ tx: Transaction) -> some View {
+        NavigationLink(value: tx) {
+            TransactionRowView(
+                transaction: tx,
+                onDelete: {
+                    transactionToDelete = tx
+                    showDeleteConfirm = true
+                },
+                onEdit: { transactionToEdit = tx }
+            )
+        }
+        .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
     }
 
     // MARK: - Static formatters (created once)

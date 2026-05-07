@@ -84,6 +84,9 @@ struct RecurringsView: View {
                 }
             }
             .navigationTitle("Abbonamenti")
+            .navigationDestination(for: Transaction.self) { tx in
+                TransactionDetailView(transaction: tx, viewModel: viewModel)
+            }
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Picker("Vista", selection: $selectedView) {
