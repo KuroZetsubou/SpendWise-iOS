@@ -217,7 +217,11 @@ struct RecurringCalendarView: View {
                 .padding(.bottom, 16)
             }
         }
+        #if os(iOS) || targetEnvironment(macCatalyst)
         .background(Color(.systemGroupedBackground))
+        #else
+        .background(Color(.windowBackgroundColor))
+        #endif
     }
 }
 

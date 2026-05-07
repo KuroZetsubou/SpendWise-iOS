@@ -169,35 +169,37 @@ struct BankConnectView: View {
                 // ── Connect New Bank ────────────────────────────────
                 Section {
                     connectBankContent
+                } header: {
+                    Label("Collega un conto bancario", systemImage: "eurosign.bank.building")
                 }
 
                 // ── Trade Republic ───────────────────────────────────
                 Section {
-                    Button {
-                        showTRCountryPicker = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.green.opacity(0.12))
-                                    .frame(width: 40, height: 40)
-                                Text("🟢")
-                                    .font(.title3)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Collega Trade Republic")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.primary)
-                                Text("Open Banking · 26 paesi EU")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+//                    Button {
+//                        showTRCountryPicker = true
+//                    } label: {
+//                        HStack(spacing: 12) {
+//                            ZStack {
+//                                Circle()
+//                                    .fill(Color.green.opacity(0.12))
+//                                    .frame(width: 40, height: 40)
+//                                Text("🟢")
+//                                    .font(.title3)
+//                            }
+//                            VStack(alignment: .leading, spacing: 2) {
+//                                Text("Collega Trade Republic")
+//                                    .font(.subheadline.bold())
+//                                    .foregroundStyle(.primary)
+//                                Text("Open Banking · 26 paesi EU")
+//                                    .font(.caption)
+//                                    .foregroundStyle(.secondary)
+//                            }
+//                            Spacer()
+//                            Image(systemName: "chevron.right")
+//                                .font(.caption)
+//                                .foregroundStyle(.secondary)
+//                        }
+//                    }
 
                     Button {
                         showTRImport = true
@@ -380,17 +382,8 @@ struct BankConnectView: View {
     // MARK: - Connect Bank Content
 
     private var connectBankContent: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 24) {
             HStack {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(Color.appPrimary)
-                Text("Collega un conto bancario")
-                    .font(.subheadline)
-            }
-
-            HStack {
-                Text("Paese:")
-                    .font(.caption)
                 Picker("Paese", selection: $selectedCountry) {
                     Text("🇮🇹 Italia").tag("IT")
                     Text("🇩🇪 Germania").tag("DE")
@@ -404,17 +397,31 @@ struct BankConnectView: View {
                 }
             }
 
-            Button {
-                showInstitutionPicker = true
-            } label: {
-                Label(
-                    isLoadingInstitutions ? "Caricamento banche..." : "Seleziona la tua banca",
-                    systemImage: "building.columns"
-                )
+            if #available(iOS 26.0, *) {
+                Button {
+                    showInstitutionPicker = true
+                } label: {
+                    Label(
+                        isLoadingInstitutions ? "Caricamento banche..." : "Seleziona la tua banca", systemImage: "arrow.2.circlepath.plus"
+                    )
+                }
+                .buttonStyle(.glassProminent)
+                .foregroundColor(.white)
+                .disabled(isLoadingInstitutions || isConnecting)
+            } else {
+                // Fallback on earlier versions
+                Button {
+                    showInstitutionPicker = true
+                } label: {
+                    Label(
+                        isLoadingInstitutions ? "Caricamento banche..." : "Seleziona la tua banca", systemImage: "arrow.2.circlepath.circle"
+                    )
+                }
+                .buttonStyle(.bordered)
+                .disabled(isLoadingInstitutions || isConnecting)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(isLoadingInstitutions || isConnecting)
         }
+        
     }
 
     // MARK: - Institution Picker Sheet
