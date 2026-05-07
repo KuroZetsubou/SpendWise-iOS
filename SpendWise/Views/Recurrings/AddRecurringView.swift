@@ -20,6 +20,8 @@ struct AddRecurringView: View {
     @State private var recurringDay: Int = 1
     @State private var notes = ""
     @State private var isActive = true
+    @State private var hasEndDate = false
+    @State private var endDate: Date = Calendar.current.date(byAdding: .year, value: 1, to: Date()) ?? Date()
     @State private var isLoading = false
     @State private var errorMessage: String?
 
@@ -89,6 +91,10 @@ struct AddRecurringView: View {
 
                 Section("Opzioni") {
                     Toggle("Attivo", isOn: $isActive)
+                    Toggle("Data di fine", isOn: $hasEndDate)
+                    if hasEndDate {
+                        DatePicker("Termina il", selection: $endDate, in: Date()..., displayedComponents: .date)
+                    }
                     TextField("Note (opzionale)", text: $notes, axis: .vertical)
                         .lineLimit(2...4)
                 }
@@ -125,6 +131,10 @@ struct AddRecurringView: View {
             recurringDay = e.recurringDate
             notes = e.notes ?? ""
             isActive = e.isActive
+            if let end = e.endDate {
+                let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"; df.locale = Locale(identifier: "en_US_POSIX")
+                if let d = df.date(from: end) { endDate = d; hasEndDate = true }
+            }
         } else if let p = prefill {
             name = p.name
             amountString = String(format: "%.2f", p.amount).replacingOccurrences(of: ".", with: ",")
@@ -144,6 +154,9 @@ struct AddRecurringView: View {
         isLoading = true
         defer { isLoading = false }
 
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"; df.locale = Locale(identifier: "en_US_POSIX")
+        let endDateString: String? = hasEndDate ? df.string(from: endDate) : nil
+
         let r = RecurringPayment(
             id: existing?.id,
             userId: uid,
@@ -155,7 +168,8 @@ struct AddRecurringView: View {
             recurringTiming: selectedTiming,
             transactionIds: existing?.transactionIds ?? [],
             notes: notes.isEmpty ? nil : notes,
-            isActive: isActive
+            isActive: isActive,
+            endDate: endDateString
         )
 
         if let id = existing?.id {
@@ -163,7 +177,8 @@ struct AddRecurringView: View {
                 "name": name, "amount": amount, "type": selectedType.rawValue,
                 "category": r.category, "recurringDate": recurringDay,
                 "recurringTiming": selectedTiming.rawValue,
-                "notes": notes, "isActive": isActive
+                "notes": notes, "isActive": isActive,
+                "endDate": endDateString as Any
             ])
         } else {
             await viewModel.addRecurring(r)

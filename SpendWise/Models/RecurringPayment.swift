@@ -78,6 +78,7 @@ struct RecurringPayment: Identifiable, Codable {
 
     var notes: String?
     var isActive: Bool
+    var endDate: String?
 
     @ServerTimestamp var createdAt: Timestamp?
     var updatedAt: String?
@@ -98,4 +99,52 @@ struct RecurringTransactionLink: Identifiable, Codable {
     var recurringId: String
     var transactionId: String
     @ServerTimestamp var linkedAt: Timestamp?
+}
+
+extension RecurringPayment {
+    /// Amount from the most recently linked transaction (nil if no linked txs).
+    func lastLinkedAmount(linkedTransactions: [Transaction]) -> Double? {
+        linkedTransactions
+            .filter { $0.recurringId == self.id }
+            .sorted { $0.date > $1.date }
+            .first?.amount
+    }
+
+    /// Monthly cost using last linked transaction amount when available.
+    func effectiveMonthlyCost(linkedTransactions: [Transaction]) -> Double {
+        (lastLinkedAmount(linkedTransactions: linkedTransactions) ?? amount) * recurringTiming.monthlyFactor
+    }
+
+    /// Compute the next expected payment date based on the most recently linked transaction.
+    func nextPaymentDate(linkedTransactions: [Transaction]) -> Date? {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+
+        var lastDate: Date?
+        for transaction in linkedTransactions where transaction.recurringId == id {
+            let dateString = String(transaction.date.prefix(10))
+            guard let parsedDate = formatter.date(from: dateString) else { continue }
+            if let currentLastDate = lastDate {
+                if parsedDate > currentLastDate {
+                    lastDate = parsedDate
+                }
+            } else {
+                lastDate = parsedDate
+            }
+        }
+
+        guard let lastDate else { return nil }
+
+        let cal = Calendar.current
+        switch recurringTiming {
+        case .daily:        return cal.date(byAdding: .day,        value: 1, to: lastDate)
+        case .weekly:       return cal.date(byAdding: .weekOfYear, value: 1, to: lastDate)
+        case .biweekly:     return cal.date(byAdding: .weekOfYear, value: 2, to: lastDate)
+        case .monthly:      return cal.date(byAdding: .month,      value: 1, to: lastDate)
+        case .quarterly:    return cal.date(byAdding: .month,      value: 3, to: lastDate)
+        case .semiannually: return cal.date(byAdding: .month,      value: 6, to: lastDate)
+        case .yearly:       return cal.date(byAdding: .year,       value: 1, to: lastDate)
+        }
+    }
 }

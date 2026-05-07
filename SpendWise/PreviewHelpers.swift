@@ -12,6 +12,7 @@ extension DashboardViewModel {
         vm.bankAccounts = MockData.bankAccounts
         vm.bankSessions = MockData.bankSessions
         vm.recurrings   = MockData.recurrings
+        vm.budgets      = MockData.budgets
         return vm
     }
 }
@@ -124,5 +125,11 @@ enum MockData {
                          amount: 1850.0, type: .income, category: "Stipendio",
                          recurringDate: 27, recurringTiming: .monthly,
                          transactionIds: [], isActive: true)
+    ]
+
+    static let budgets: [Budget] = [
+        Budget(userId: "preview", category: "Cibo & Spesa", monthlyLimit: 300, isActive: true),
+        Budget(userId: "preview", category: "Intrattenimento", monthlyLimit: 80, isActive: true),
+        Budget(userId: "preview", category: "Trasporti", monthlyLimit: 150, isActive: true)
     ]
 }

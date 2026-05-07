@@ -34,6 +34,7 @@ class TransactionSyncService {
     func syncAll(
         userId: String,
         days: Int = 30,
+        disabledAccountIds: Set<String> = [],
         onProgress: ((SyncProgress) -> Void)? = nil
     ) async -> SyncResult {
         var result = SyncResult()
@@ -127,6 +128,12 @@ class TransactionSyncService {
             syncLog.info("💳 Found \(accountIds.count) accounts for \(aspspName): \(accountIds.map { $0.name }.joined(separator: ", "))")
 
             for (accountIndex, account) in accountIds.enumerated() {
+                // Skip accounts where sync has been disabled in settings
+                if disabledAccountIds.contains(account.id) {
+                    syncLog.info("⏭ Skipping \(account.name) — sync disabled in account settings")
+                    continue
+                }
+
                 onProgress?(SyncProgress(
                     currentAccount: account.name,
                     accountIndex: accountIndex,

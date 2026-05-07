@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var isResetting = false
     @State private var alertMessage: String?
     @State private var showAlert = false
+    @State private var showAnonLogoutConfirm = false
 
     var body: some View {
         NavigationStack {
@@ -59,6 +60,18 @@ struct SettingsView: View {
                     Task { await deleteImportedTransactions() }
                 }
                 Button("Annulla", role: .cancel) {}
+            }
+            .confirmationDialog(
+                "Sei sicuro di voler uscire?",
+                isPresented: $showAnonLogoutConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Esci e cancella dati", role: .destructive) {
+                    authViewModel.signOut()
+                }
+                Button("Annulla", role: .cancel) {}
+            } message: {
+                Text("Stai usando un account anonimo. Uscendo, tutti i tuoi dati (transazioni, conti, abbonamenti) verranno eliminati definitivamente e non potranno essere recuperati.\n\nPrima di uscire, considera di collegare un account Google per salvare i dati.")
             }
         }
     }
@@ -118,7 +131,11 @@ struct SettingsView: View {
             }
 
             Button(role: .destructive) {
-                authViewModel.signOut()
+                if authViewModel.isAnonymous {
+                    showAnonLogoutConfirm = true
+                } else {
+                    authViewModel.signOut()
+                }
             } label: {
                 Label(
                     authViewModel.isAnonymous ? "Esci (i dati locali andranno persi)" : "Logout",
@@ -161,30 +178,26 @@ struct SettingsView: View {
 
     private var bankAPISection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("App ID (Enable Banking)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                TextField("App ID", text: $ebAppId)
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Private Key RSA (PEM)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                SecureField("-----BEGIN PRIVATE KEY-----", text: $ebAppSecret)
-            }
-            Link(destination: URL(string: "https://enablebanking.com/docs/")!) {
-                Label("Documentazione Enable Banking", systemImage: "arrow.up.right.square")
-                    .font(.caption)
+            NavigationLink {
+                EnableBankingSettingsView(viewModel: viewModel)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "building.columns.fill")
+                        .foregroundStyle(Color.appPrimary)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Open Banking")
+                            .font(.subheadline)
+                        Text(ebAppId.isEmpty ? "Non configurato" : "App ID: \(ebAppId.prefix(8))…")
+                            .font(.caption)
+                            .foregroundStyle(ebAppId.isEmpty ? Color.expense : .secondary)
+                    }
+                }
             }
         } header: {
             Text("Open Banking")
         } footer: {
-            Text("Le chiamate API avvengono direttamente dal dispositivo verso api.enablebanking.com — nessun server intermedio richiesto.")
+            Text("Connetti i conti bancari via Enable Banking API.")
                 .font(.caption2)
         }
     }

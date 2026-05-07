@@ -333,11 +333,28 @@ class FirestoreService: ObservableObject {
     }
 
     func saveBankAccounts(userId: String, accounts: [[String: Any]]) async throws {
+        // Fetch existing accounts to merge by IBAN — avoids duplicates when reconnecting sessions
+        let existing: [BankAccount]
+        do { existing = try await getBankAccounts(userId: userId) }
+        catch { existing = [] }
+
         let batch = db.batch()
         for account in accounts {
             guard let id = account["id"] as? String else { continue }
+            let iban = (account["officialName"] as? String) ?? ""
+
+            // If an existing account already has the same IBAN, reuse its document ID
+            // (this handles session reconnects where the API may return a different UID)
+            let docId: String
+            if !iban.isEmpty,
+               let match = existing.first(where: { ($0.officialName ?? "").uppercased() == iban.uppercased() }) {
+                docId = match.id
+            } else {
+                docId = id
+            }
+
             let ref = db.collection("users").document(userId)
-                .collection("bank_accounts").document(id)
+                .collection("bank_accounts").document(docId)
             batch.setData(account, forDocument: ref, merge: true)
         }
         try await batch.commit()
@@ -375,6 +392,7 @@ class FirestoreService: ObservableObject {
     // MARK: - Recurrings
 
     private var recurringsListener: ListenerRegistration?
+    private var budgetsListener: ListenerRegistration?
 
     func subscribeRecurrings(userId: String, onChange: @escaping ([RecurringPayment]) -> Void) {
         recurringsListener?.remove()
@@ -410,6 +428,34 @@ class FirestoreService: ObservableObject {
         links.documents.forEach { batch.deleteDocument($0.reference) }
         batch.deleteDocument(db.collection("recurrings").document(id))
         try await batch.commit()
+    }
+
+    // MARK: - Budgets
+
+    func subscribeBudgets(userId: String, onChange: @escaping ([Budget]) -> Void) {
+        budgetsListener?.remove()
+        budgetsListener = db.collection("budgets")
+            .whereField("userId", isEqualTo: userId)
+            .addSnapshotListener { snapshot, _ in
+                let items = snapshot?.documents.compactMap { try? $0.data(as: Budget.self) } ?? []
+                DispatchQueue.main.async { onChange(items) }
+            }
+    }
+
+    func stopBudgetsListener() { budgetsListener?.remove(); budgetsListener = nil }
+
+    func addBudget(_ budget: Budget) async throws -> String {
+        let data = try Firestore.Encoder().encode(budget)
+        let ref = try await db.collection("budgets").addDocument(data: data)
+        return ref.documentID
+    }
+
+    func updateBudget(id: String, updates: [String: Any]) async throws {
+        try await db.collection("budgets").document(id).updateData(updates)
+    }
+
+    func deleteBudget(id: String) async throws {
+        try await db.collection("budgets").document(id).delete()
     }
 
     // MARK: - Junction: recurring ↔ transaction links
@@ -473,10 +519,12 @@ class FirestoreService: ObservableObject {
         accountSettingsListener?.remove()
         bankAccountsListener?.remove()
         recurringsListener?.remove()
+        budgetsListener?.remove()
         transactionListener = nil
         categoryListener = nil
         accountSettingsListener = nil
         bankAccountsListener = nil
         recurringsListener = nil
+        budgetsListener = nil
     }
 }

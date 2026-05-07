@@ -188,11 +188,11 @@ struct TradeRepublicImportView: View {
 
     private var steps: some View {
         VStack(alignment: .leading, spacing: 6) {
-            stepRow("1", "Apri l'app Trade Republic")
+            stepRow("1", "Apri l'app Trade Republic.")
             stepRow("2", "Tocca l'icona del profilo in alto a destra")
-            stepRow("3", "Scorri fino a \"Documenti\" → \"Esporta\"")
-            stepRow("4", "Seleziona il formato CSV e scegli il periodo")
-            stepRow("5", "Seleziona il file scaricato qui sotto")
+            stepRow("3", "Scorri fino a \"Estratto Conto\" → \"Esporta Transazioni\".")
+            stepRow("4", "Scegli il periodo che vuoi esportare.")
+            stepRow("5", "Seleziona il file scaricato qui sotto.")
         }
     }
 

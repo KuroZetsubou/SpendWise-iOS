@@ -27,6 +27,7 @@ class DashboardViewModel: ObservableObject {
     @Published var accountSettings: [String: BankAccountSettings] = [:]
     @Published var insights: [FinancialInsight] = []
     @Published var recurrings: [RecurringPayment] = []
+    @Published var budgets: [Budget] = []
 
     @Published var isLoadingInsights = false
     @Published var isLoadingTransactions = false
@@ -110,6 +111,9 @@ class DashboardViewModel: ObservableObject {
         }
         firestoreService.subscribeRecurrings(userId: userId) { [weak self] items in
             self?.recurrings = items
+        }
+        firestoreService.subscribeBudgets(userId: userId) { [weak self] items in
+            self?.budgets = items
         }
         firestoreService.subscribeBankAccounts(userId: userId) { [weak self] accounts in
             self?.bankAccounts = accounts
@@ -349,11 +353,54 @@ class DashboardViewModel: ObservableObject {
 
     // MARK: - Recurring payments (from dedicated collection)
 
-    var activeRecurrings: [RecurringPayment] { recurrings.filter(\.isActive) }
+    var activeRecurrings: [RecurringPayment] {
+        let today = { () -> String in
+            let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"
+            df.locale = Locale(identifier: "en_US_POSIX")
+            return df.string(from: Date())
+        }()
+        return recurrings.filter { r in
+            guard r.isActive else { return false }
+            if let end = r.endDate, end < today { return false }
+            return true
+        }
+    }
 
     var monthlyRecurringCost: Double {
         activeRecurrings.filter { $0.type == .expense }
-            .reduce(0) { $0 + $1.monthlyCost }
+            .reduce(0) { $0 + $1.effectiveMonthlyCost(linkedTransactions: transactions) }
+    }
+
+    /// Sum of amounts actually paid for active recurrings in the current calendar month.
+    var actualMonthlyRecurringCost: Double {
+        let paidIds = currentMonthPaidRecurringIds
+        let cal = Calendar.current
+        let now = Date()
+        var total = 0.0
+        for r in activeRecurrings where r.type == .expense && paidIds.contains(r.id ?? "") {
+            let thisMonthPayments = transactions.filter { tx in
+                guard tx.recurringId == r.id, tx.type == .expense else { return false }
+                guard let d = dateFromString(tx.date) else { return false }
+                return cal.isDate(d, equalTo: now, toGranularity: .month)
+            }
+            total += thisMonthPayments.reduce(0) { $0 + $1.amount }
+        }
+        return total
+    }
+
+    /// Total income (non-ignored, non-transfer) for a given calendar month.
+    func monthlyIncomeTotal(for date: Date) -> Double {
+        let cal = Calendar.current
+        return transactions.filter { tx in
+            guard !tx.isIgnored, tx.type == .income else { return false }
+            guard let d = dateFromString(tx.date) else { return false }
+            return cal.isDate(d, equalTo: date, toGranularity: .month)
+        }.reduce(0) { $0 + $1.amount }
+    }
+
+    /// Total expenses (non-ignored) for a given calendar month.
+    func monthlyExpensesTotal(for date: Date) -> Double {
+        expenseCategoryBreakdown(for: date).reduce(0) { $0 + $1.amount }
     }
 
     /// Projected balance at end of current month:
@@ -435,6 +482,24 @@ class DashboardViewModel: ObservableObject {
         catch { errorMessage = error.localizedDescription }
     }
 
+    func addBudget(_ budget: Budget) async {
+        guard let userId = userId else { return }
+        var b = budget
+        b.userId = userId
+        do { _ = try await firestoreService.addBudget(b) }
+        catch { errorMessage = error.localizedDescription }
+    }
+
+    func updateBudget(id: String, updates: [String: Any]) async {
+        do { try await firestoreService.updateBudget(id: id, updates: updates) }
+        catch { errorMessage = error.localizedDescription }
+    }
+
+    func deleteBudget(id: String) async {
+        do { try await firestoreService.deleteBudget(id: id) }
+        catch { errorMessage = error.localizedDescription }
+    }
+
     func linkTransaction(recurringId: String, transactionId: String) async {
         guard let userId = userId else { return }
         do { try await firestoreService.linkTransaction(recurringId: recurringId, transactionId: transactionId, userId: userId) }
@@ -456,9 +521,12 @@ class DashboardViewModel: ObservableObject {
         isSyncingTransactions = true
         syncProgress = nil
 
+        let disabledAccountIds = Set(accountSettings.filter { $0.value.syncDisabled == true }.keys)
+
         let result = await TransactionSyncService.shared.syncAll(
             userId: userId,
-            days: days
+            days: days,
+            disabledAccountIds: disabledAccountIds
         ) { [weak self] progress in
             self?.syncProgress = progress
         }

@@ -5,6 +5,7 @@ struct InsightsView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @State private var showError = false
     @State private var insightsMonthOffset: Int = 0
+    @State private var selectedCategoryDrilldown: CategoryBreakdown? = nil
 
     private var canGoBack: Bool { insightsMonthOffset > -24 }
     private var canGoForward: Bool { insightsMonthOffset < 0 }
@@ -26,7 +27,8 @@ struct InsightsView: View {
                 LazyVStack(spacing: 20) {
                     monthNavigator
                     expensePieChart
-                    monthlyAreaChart
+                    monthlySavingsSection
+                    categoryListSection
                     recurringSection
                     aiInsightsSection
                 }
@@ -52,6 +54,13 @@ struct InsightsView: View {
                 Button("OK") { viewModel.dismissError() }
             } message: {
                 Text(viewModel.errorMessage ?? "")
+            }
+            .sheet(item: $selectedCategoryDrilldown) { cat in
+                CategoryTransactionsSheet(
+                    category: cat,
+                    date: selectedDate,
+                    viewModel: viewModel
+                )
             }
         }
     }
@@ -138,51 +147,6 @@ struct InsightsView: View {
                         }
                     }
                 }
-                .padding(.horizontal)
-            }
-        }
-        .cardStyle()
-        .padding(.horizontal)
-    }
-
-    // MARK: - Monthly Trend (Area Chart)
-
-    private var monthlyAreaChart: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Trend ultimi 6 mesi")
-                .font(.headline)
-                .padding(.horizontal)
-
-            if viewModel.monthlyChartData.isEmpty {
-                Text("Nessun dato disponibile")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            } else {
-                let incomeData = viewModel.monthlyChartData.filter { $0.type == "Entrate" }
-                let expenseData = viewModel.monthlyChartData.filter { $0.type == "Uscite" }
-
-                Chart {
-                    ForEach(incomeData) { item in
-                        AreaMark(x: .value("Mese", item.month), y: .value("Importo", item.amount))
-                            .foregroundStyle(Color.income.gradient.opacity(0.3))
-                        LineMark(x: .value("Mese", item.month), y: .value("Importo", item.amount))
-                            .foregroundStyle(Color.income)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                            .symbol(.circle)
-                    }
-                    ForEach(expenseData) { item in
-                        AreaMark(x: .value("Mese", item.month), y: .value("Importo", item.amount))
-                            .foregroundStyle(Color.expense.gradient.opacity(0.3))
-                        LineMark(x: .value("Mese", item.month), y: .value("Importo", item.amount))
-                            .foregroundStyle(Color.expense)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                            .symbol(.circle)
-                    }
-                }
-                .chartForegroundStyleScale(["Entrate": Color.income, "Uscite": Color.expense])
-                .chartLegend(position: .bottom)
-                .frame(height: 200)
                 .padding(.horizontal)
             }
         }
@@ -278,7 +242,146 @@ struct InsightsView: View {
         }
     }
 
-    // MARK: - AI Insights
+    // MARK: - Category List
+
+    private var categoryListSection: some View {
+        let breakdown = viewModel.expenseCategoryBreakdown(for: selectedDate)
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Categorie del mese")
+                .font(.headline)
+                .padding(.horizontal)
+
+            if breakdown.isEmpty {
+                Text("Nessuna spesa in \(monthLabel)")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(breakdown) { item in
+                        Button {
+                            selectedCategoryDrilldown = item
+                        } label: {
+                            categoryListRow(item: item, max: breakdown.first?.amount ?? 1)
+                        }
+                        .buttonStyle(.plain)
+                        if item.id != breakdown.last?.id {
+                            Divider().padding(.horizontal)
+                        }
+                    }
+                }
+                .padding(.horizontal)
+            }
+        }
+        .cardStyle()
+        .padding(.horizontal)
+    }
+
+    private func categoryListRow(item: CategoryBreakdown, max: Double) -> some View {
+        HStack(spacing: 12) {
+            CategoryIconView(categoryName: item.category, size: 36, showBackground: true)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(item.category)
+                        .font(.subheadline.bold())
+                        .lineLimit(1)
+                    Spacer()
+                    Text(item.amount.euroFormatted)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(Color.expense)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.secondary.opacity(0.12)).frame(height: 5)
+                        Capsule()
+                            .fill(Color(hex: item.color))
+                            .frame(width: geo.size.width * CGFloat(item.amount / max), height: 5)
+                    }
+                }
+                .frame(height: 5)
+                Text(item.percentage.percentFormatted + " del totale")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Image(systemName: "chevron.right")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 8)
+    }
+
+
+
+    // MARK: - Monthly Savings
+
+    private var monthlySavingsSection: some View {
+        let income   = viewModel.monthlyIncomeTotal(for: selectedDate)
+        let expenses = viewModel.monthlyExpensesTotal(for: selectedDate)
+        let savings  = income - expenses
+        let ratio    = income > 0 ? min(max(savings / income, 0), 1) : 0
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Riepilogo del mese")
+                .font(.headline)
+                .padding(.horizontal)
+
+            HStack(spacing: 0) {
+                savingsTile(label: "Entrate", value: income, icon: "arrow.down.circle.fill", color: Color.income)
+                Divider()
+                savingsTile(label: "Uscite", value: expenses, icon: "arrow.up.circle.fill", color: Color.expense)
+                Divider()
+                VStack(spacing: 4) {
+                    Image(systemName: savings >= 0 ? "plus.circle.fill" : "minus.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(savings >= 0 ? Color.income : Color.expense)
+                    Text(savings >= 0 ? "+\(savings.euroFormatted)" : savings.euroFormatted)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(savings >= 0 ? Color.income : Color.expense)
+                    Text("Risparmio")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            }
+
+            if income > 0 {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Tasso di risparmio")
+                            .font(.caption.bold())
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("\(Int(ratio * 100))%")
+                            .font(.caption.bold())
+                            .foregroundStyle(ratio >= 0.2 ? Color.income : ratio >= 0 ? .orange : Color.expense)
+                    }
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.secondary.opacity(0.12)).frame(height: 6)
+                            Capsule()
+                                .fill(ratio >= 0.2 ? Color.income : ratio >= 0 ? .orange : Color.expense)
+                                .frame(width: geo.size.width * CGFloat(ratio), height: 6)
+                        }
+                    }
+                    .frame(height: 6)
+                }
+                .padding(.horizontal)
+            }
+        }
+        .cardStyle()
+        .padding(.horizontal)
+    }
+
+    private func savingsTile(label: String, value: Double, icon: String, color: Color) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: icon).font(.title2).foregroundStyle(color)
+            Text(value.euroFormatted).font(.subheadline.bold())
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+    }
 
     private var aiInsightsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -319,6 +422,86 @@ struct InsightsView: View {
         .cardStyle()
         .padding(.horizontal)
         .padding(.bottom, 8)
+    }
+}
+
+// MARK: - Category Transactions Sheet
+struct CategoryTransactionsSheet: View {
+    let category: CategoryBreakdown
+    let date: Date
+    @ObservedObject var viewModel: DashboardViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    private var transactions: [Transaction] {
+        let cal = Calendar.current
+        return viewModel.transactions.filter { tx in
+            guard !tx.isIgnored, tx.type == .expense, tx.category == category.category else { return false }
+            guard let txDate = cal.date(from: cal.dateComponents([.year, .month, .day], from: {
+                let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"; df.locale = Locale(identifier: "en_US_POSIX")
+                return df.date(from: String(tx.date.prefix(10))) ?? Date.distantPast
+            }())) else { return false }
+            return cal.isDate(txDate, equalTo: date, toGranularity: .month)
+        }.sorted { $0.date > $1.date }
+    }
+
+    private var monthLabel: String {
+        let f = DateFormatter(); f.dateFormat = "MMMM yyyy"; f.locale = Locale(identifier: "it_IT")
+        return f.string(from: date).capitalized
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    HStack(spacing: 16) {
+                        CategoryIconView(categoryName: category.category, size: 48, showBackground: true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(category.category).font(.title3.bold())
+                            Text(monthLabel).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text(category.amount.euroFormatted)
+                                .font(.title3.bold()).foregroundStyle(Color.expense)
+                            Text(category.percentage.percentFormatted)
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("\(transactions.count) transazioni") {
+                    ForEach(transactions) { tx in
+                        NavigationLink(value: tx) {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(tx.description.isEmpty ? tx.category : tx.description)
+                                        .font(.subheadline).lineLimit(1)
+                                    Text(String(tx.date.prefix(10)))
+                                        .font(.caption2).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text("-" + tx.amount.euroFormatted)
+                                    .font(.subheadline.bold()).foregroundStyle(Color.expense)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(category.category)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .navigationDestination(for: Transaction.self) { tx in
+                TransactionDetailView(transaction: tx, viewModel: viewModel)
+            }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Chiudi") { dismiss() }
+                }
+            }
+        }
     }
 }
 

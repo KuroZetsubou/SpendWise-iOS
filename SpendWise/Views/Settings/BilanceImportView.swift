@@ -28,6 +28,37 @@ struct BilanceImportView: View {
         Array(Set(parsedTransactions.map { $0.conto }.filter { !$0.isEmpty })).sorted()
     }
 
+    /// Bank accounts deduplicated by IBAN — expired-session duplicates are merged.
+    /// For each IBAN, prefer the account belonging to an active (non-expired) session.
+    private var deduplicatedAccounts: [BankAccount] {
+        let expiredStatuses: Set<String> = ["EXPIRED", "REVOKED", "UNAUTHORIZED", "DELETED"]
+        let activeSessions = Set(
+            viewModel.bankSessions
+                .filter { !expiredStatuses.contains(($0.status ?? "").uppercased()) }
+                .compactMap { $0.sessionId }
+        )
+
+        var byIban: [String: BankAccount] = [:]
+        var noIban: [BankAccount] = []
+
+        for account in viewModel.resolvedBankAccounts {
+            guard let iban = account.officialName, !iban.isEmpty else {
+                noIban.append(account); continue
+            }
+            let key = iban.uppercased()
+            if let existing = byIban[key] {
+                let existingActive = activeSessions.contains(existing.sessionId ?? "")
+                let newActive = activeSessions.contains(account.sessionId ?? "")
+                if newActive && !existingActive { byIban[key] = account }
+                // else keep existing
+            } else {
+                byIban[key] = account
+            }
+        }
+        let unique = Array(byIban.values) + noIban
+        return unique.sorted { $0.displayName < $1.displayName }
+    }
+
     private var filteredTransactions: [BilanceCSVParser.BilanceTx] {
         parsedTransactions
             .filter { tx in
@@ -75,23 +106,7 @@ struct BilanceImportView: View {
                 if !uniqueConti.isEmpty {
                     Section {
                         ForEach(uniqueConti, id: \.self) { conto in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(conto)
-                                    .font(.subheadline.bold())
-                                    .lineLimit(1)
-                                Picker("Conto SpendWise", selection: Binding(
-                                    get: { contoMappings[conto] ?? "" },
-                                    set: { contoMappings[conto] = $0 }
-                                )) {
-                                    Text("— Non assegnato —").tag("")
-                                    ForEach(viewModel.resolvedBankAccounts) { acc in
-                                        Text(acc.displayName).tag(acc.id ?? "")
-                                    }
-                                }
-                                .pickerStyle(.menu)
-                                .font(.caption)
-                            }
-                            .padding(.vertical, 2)
+                            contoMappingRow(conto: conto)
                         }
                     } header: {
                         Label("Associa conti Bilance", systemImage: "building.columns")
@@ -241,6 +256,76 @@ struct BilanceImportView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    // Grouped picker for a single conto: shows accounts grouped by institution
+    @ViewBuilder
+    private func contoMappingRow(conto: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(conto)
+                .font(.subheadline.bold())
+                .lineLimit(1)
+            Menu {
+                Button { contoMappings[conto] = "" } label: {
+                    Label("— Non assegnato —", systemImage: "xmark.circle")
+                }
+                // Group accounts by institution
+                let grouped = groupedAccounts
+                ForEach(grouped, id: \.institution) { group in
+                    if group.accounts.count == 1 {
+                        let acc = group.accounts[0]
+                        Button { contoMappings[conto] = acc.id ?? "" } label: {
+                            HStack {
+                                Label(acc.displayName, systemImage: "building.columns")
+                                if contoMappings[conto] == (acc.id ?? "") {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    } else {
+                        Menu(group.institution) {
+                            ForEach(group.accounts) { acc in
+                                Button { contoMappings[conto] = acc.id ?? "" } label: {
+                                    HStack {
+                                        Text(acc.displayName)
+                                        if contoMappings[conto] == (acc.id ?? "") {
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack {
+                    let selName = deduplicatedAccounts.first(where: { $0.id == contoMappings[conto] })?.displayName
+                    Text(selName ?? "— Non assegnato —")
+                        .font(.caption)
+                        .foregroundStyle(selName != nil ? Color.primary : Color.secondary)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private struct AccountGroup {
+        let institution: String
+        let accounts: [BankAccount]
+    }
+
+    private var groupedAccounts: [AccountGroup] {
+        let all = deduplicatedAccounts
+        var dict: [String: [BankAccount]] = [:]
+        for acc in all {
+            let key = acc.institutionName ?? "Altro"
+            dict[key, default: []].append(acc)
+        }
+        return dict.sorted { $0.key < $1.key }.map { AccountGroup(institution: $0.key, accounts: $0.value) }
     }
 
     private func previewRow(_ tx: BilanceCSVParser.BilanceTx) -> some View {

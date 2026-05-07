@@ -9,6 +9,7 @@ struct BankAccountDetailView: View {
     @ObservedObject var viewModel: DashboardViewModel
 
     @State private var copiedLabel: String? = nil
+    @State private var showEditSettings = false
 
     private var accountTransactions: [Transaction] {
         viewModel.transactions
@@ -166,6 +167,18 @@ struct BankAccountDetailView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showEditSettings = true
+                } label: {
+                    Image(systemName: "slider.horizontal.3")
+                }
+            }
+        }
+        .sheet(isPresented: $showEditSettings) {
+            AccountSettingsEditView(account: account, viewModel: viewModel)
+        }
         .navigationDestination(for: Transaction.self) { tx in
             TransactionDetailView(transaction: tx, viewModel: viewModel)
         }

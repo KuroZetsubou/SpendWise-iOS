@@ -142,6 +142,7 @@ struct BankAccountSettings: Codable {
     var customName: String?
     var warningThreshold: Double?
     var dangerThreshold: Double?
+    var syncDisabled: Bool?
     var updatedAt: String?
 }
 

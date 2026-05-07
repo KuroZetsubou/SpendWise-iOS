@@ -10,12 +10,18 @@ private struct SuggestionItem: Identifiable {
 }
 
 struct RecurringsView: View {
+    enum RecurringViewMode: String, CaseIterable {
+        case list = "Lista"
+        case calendar = "Calendario"
+    }
+
     @ObservedObject var viewModel: DashboardViewModel
+    @State private var selectedView: RecurringViewMode = .list
     @State private var showAdd = false
     @State private var itemToEdit: RecurringPayment?
     @State private var itemToDelete: RecurringPayment?
     @State private var showDeleteConfirm = false
-    @State private var expandedId: String? = nil
+    @State private var itemToDetail: RecurringPayment?
     @State private var suggestionToConvert: SuggestionItem?
     @State private var suggestionsExpanded = true
 
@@ -27,57 +33,67 @@ struct RecurringsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if viewModel.recurrings.isEmpty {
-                    ContentUnavailableView {
-                        Label("Nessun abbonamento", systemImage: "repeat.circle")
-                    } description: {
-                        Text("Aggiungi i tuoi pagamenti fissi per tracciarli e calcolare il costo mensile.")
-                    } actions: {
-                        Button("Aggiungi") { showAdd = true }
-                            .buttonStyle(.borderedProminent)
-                    }
-                } else {
-                    List {
-                        summaryHeader
-                        
-                        ForEach(RecurringTiming.allCases) { timing in
-                            let items = viewModel.activeRecurrings.filter { $0.recurringTiming == timing }
-                            if !items.isEmpty {
-                                Section(timing.label) {
-                                    ForEach(items) { item in
-                                        RecurringRowView(
-                                            item: item,
-                                            isExpanded: expandedId == item.id,
-                                            isPaidThisMonth: paidIds.contains(item.id ?? ""),
-                                            linkedTransactions: viewModel.transactions.filter { $0.recurringId == item.id },
-                                            onTap: {
-                                                withAnimation { expandedId = expandedId == item.id ? nil : item.id }
-                                            },
-                                            onEdit: { itemToEdit = item },
-                                            onDelete: { itemToDelete = item; showDeleteConfirm = true },
-                                            onLinkTransaction: { tx in
-                                                if let rid = item.id {
-                                                    Task { await viewModel.linkTransaction(recurringId: rid, transactionId: tx.id ?? "") }
-                                                }
-                                            },
-                                            onUnlinkTransaction: { tx in
-                                                if let rid = item.id {
-                                                    Task { await viewModel.unlinkTransaction(recurringId: rid, transactionId: tx.id ?? "") }
-                                                }
-                                            },
-                                            allTransactions: viewModel.transactions
-                                        )
+                if selectedView == .list {
+                    if viewModel.recurrings.isEmpty {
+                        ContentUnavailableView {
+                            Label("Nessun abbonamento", systemImage: "repeat.circle")
+                        } description: {
+                            Text("Aggiungi i tuoi pagamenti fissi per tracciarli e calcolare il costo mensile.")
+                        } actions: {
+                            Button("Aggiungi") { showAdd = true }
+                                .buttonStyle(.borderedProminent)
+                        }
+                    } else {
+                        List {
+                            summaryHeader
+
+                            ForEach(RecurringTiming.allCases) { timing in
+                                let items = viewModel.activeRecurrings.filter { $0.recurringTiming == timing }
+                                if !items.isEmpty {
+                                    Section(timing.label) {
+                                        ForEach(items) { item in
+                                    RecurringRowView(
+                                        item: item,
+                                        isPaidThisMonth: paidIds.contains(item.id ?? ""),
+                                        linkedTransactions: viewModel.transactions.filter { $0.recurringId == item.id },
+                                        onTap: { itemToDetail = item },
+                                        onEdit: { itemToEdit = item },
+                                        onDelete: { itemToDelete = item; showDeleteConfirm = true },
+                                        onLinkTransaction: { tx in
+                                            if let rid = item.id {
+                                                Task { await viewModel.linkTransaction(recurringId: rid, transactionId: tx.id ?? "") }
+                                            }
+                                        },
+                                        onUnlinkTransaction: { tx in
+                                            if let rid = item.id {
+                                                Task { await viewModel.unlinkTransaction(recurringId: rid, transactionId: tx.id ?? "") }
+                                            }
+                                        },
+                                        allTransactions: viewModel.transactions
+                                    )
+                                }
                                     }
                                 }
                             }
+
+                            suggestedSection
                         }
-                        
-                        suggestedSection
                     }
+                } else {
+                    RecurringCalendarView(viewModel: viewModel)
                 }
             }
             .navigationTitle("Abbonamenti")
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Picker("Vista", selection: $selectedView) {
+                        ForEach(RecurringViewMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button { showAdd = true } label: {
                         Image(systemName: "plus.circle.fill").font(.title3)
@@ -89,6 +105,14 @@ struct RecurringsView: View {
             }
             .sheet(item: $itemToEdit) { item in
                 AddRecurringView(viewModel: viewModel, existing: item)
+            }
+            .sheet(item: $itemToDetail) { item in
+                RecurringDetailSheet(
+                    item: item,
+                    viewModel: viewModel,
+                    onEdit: { itemToEdit = item },
+                    onDelete: { itemToDelete = item; showDeleteConfirm = true }
+                )
             }
             .sheet(item: $suggestionToConvert) { suggestion in
                 AddRecurringView(
@@ -117,17 +141,24 @@ struct RecurringsView: View {
             VStack(spacing: 10) {
                 HStack(spacing: 0) {
                     summaryTile(
-                        label: "Costo mensile",
-                        value: viewModel.monthlyRecurringCost.euroFormatted,
-                        icon: "calendar",
+                        label: "Pagato questo mese",
+                        value: viewModel.actualMonthlyRecurringCost.euroFormatted,
+                        icon: "checkmark.circle",
                         color: Color.expense
                     )
                     Divider()
                     summaryTile(
-                        label: "Costo annuo",
+                        label: "Media mensile",
+                        value: viewModel.monthlyRecurringCost.euroFormatted,
+                        icon: "calendar",
+                        color: .appPrimary
+                    )
+                    Divider()
+                    summaryTile(
+                        label: "Media annua",
                         value: (viewModel.monthlyRecurringCost * 12).euroFormatted,
                         icon: "star.circle",
-                        color: .appPrimary
+                        color: .secondary
                     )
                 }
                 .frame(maxWidth: .infinity)
@@ -253,7 +284,6 @@ private struct StatusPill: View {
 
 struct RecurringRowView: View {
     let item: RecurringPayment
-    let isExpanded: Bool
     let isPaidThisMonth: Bool
     let linkedTransactions: [Transaction]
     let onTap: () -> Void
@@ -263,125 +293,267 @@ struct RecurringRowView: View {
     let onUnlinkTransaction: (Transaction) -> Void
     let allTransactions: [Transaction]
 
-    @State private var showLinkPicker = false
+    private var effectiveAmount: Double {
+        item.lastLinkedAmount(linkedTransactions: linkedTransactions) ?? item.amount
+    }
 
-    private var unlinkableTransactions: [Transaction] {
-        allTransactions.filter {
-            $0.recurringId == nil && $0.description.localizedCaseInsensitiveContains(item.name)
-        }
+    private var effectiveMonthly: Double {
+        item.effectiveMonthlyCost(linkedTransactions: linkedTransactions)
+    }
+
+    private var endDateLabel: String? {
+        guard let end = item.endDate else { return nil }
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"; df.locale = Locale(identifier: "en_US_POSIX")
+        guard let d = df.date(from: end) else { return nil }
+        let display = DateFormatter(); display.dateFormat = "d MMM yyyy"; display.locale = Locale(identifier: "it_IT")
+        return display.string(from: d)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Main row
-            Button(action: onTap) {
-                HStack(spacing: 12) {
-                    CategoryIconView(categoryName: item.category, size: 40, showBackground: true)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.name).font(.subheadline.bold()).lineLimit(1)
-                        HStack(spacing: 4) {
-                            Image(systemName: item.recurringTiming.systemImage).font(.caption2)
-                            Text(item.recurringTiming.label).font(.caption)
-                            Text("· giorno \(item.recurringDate)").font(.caption).foregroundStyle(.secondary)
-                        }
-                        .foregroundStyle(.secondary)
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                CategoryIconView(categoryName: item.category, size: 40, showBackground: true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.name).font(.subheadline.bold()).lineLimit(1)
+                    HStack(spacing: 4) {
+                        Image(systemName: item.recurringTiming.systemImage).font(.caption2)
+                        Text(item.recurringTiming.label).font(.caption)
+                        Text("· giorno \(item.recurringDate)").font(.caption).foregroundStyle(.secondary)
                     }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text((item.type == .expense ? "-" : "+") + item.amount.euroFormatted)
-                            .font(.subheadline.bold())
-                            .foregroundStyle(item.type == .expense ? Color.expense : Color.income)
-                        Text("≈ \(item.monthlyCost.euroFormatted)/mese")
+                    .foregroundStyle(.secondary)
+                    if let nextDate = item.nextPaymentDate(linkedTransactions: linkedTransactions) {
+                        let isPast = nextDate < Date()
+                        Label(
+                            nextPaymentLabel(date: nextDate, isPast: isPast),
+                            systemImage: isPast ? "exclamationmark.circle" : "calendar.badge.clock"
+                        )
+                        .font(.caption2)
+                        .foregroundStyle(isPast ? Color.expense : .secondary)
+                    }
+                    if let end = endDateLabel {
+                        Label("Fino al \(end)", systemImage: "calendar.badge.minus")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                        // Paid / pending badge for current month
-                        if isPaidThisMonth {
-                            Label("Pagato", systemImage: "checkmark.circle.fill")
-                                .font(.caption2.bold())
-                                .foregroundStyle(.green)
-                        } else {
-                            Label("Da pagare", systemImage: "clock.fill")
-                                .font(.caption2.bold())
-                                .foregroundStyle(.orange)
-                        }
                     }
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .swipeActions(edge: .trailing) {
-                Button(role: .destructive, action: onDelete) { Label("Elimina", systemImage: "trash") }
-                Button(action: onEdit) { Label("Modifica", systemImage: "pencil") }.tint(.orange)
-            }
-
-            // Expanded: linked transactions
-            if isExpanded {
-                Divider().padding(.top, 8)
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Transazioni collegate (\(linkedTransactions.count))")
-                            .font(.caption.bold())
+                Spacer()
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text((item.type == .expense ? "-" : "+") + effectiveAmount.euroFormatted)
+                        .font(.subheadline.bold())
+                        .foregroundStyle(item.type == .expense ? Color.expense : Color.income)
+                    if abs(effectiveAmount - item.amount) > 0.01 {
+                        Text("config: \(item.amount.euroFormatted)")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
-                        Spacer()
-                        Button {
-                            showLinkPicker = true
-                        } label: {
-                            Label("Collega", systemImage: "link.badge.plus")
-                                .font(.caption)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.mini)
                     }
-                    .padding(.top, 4)
-
-                    if linkedTransactions.isEmpty {
-                        Text("Nessuna transazione collegata")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 4)
+                    Text("≈ \(effectiveMonthly.euroFormatted)/mese")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if isPaidThisMonth {
+                        Label("Pagato", systemImage: "checkmark.circle.fill")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.green)
                     } else {
-                        ForEach(linkedTransactions.prefix(5)) { tx in
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(tx.description.isEmpty ? tx.category : tx.description)
-                                        .font(.caption)
-                                        .lineLimit(1)
-                                    Text(tx.date.prefix(10))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
+                        Label("Da pagare", systemImage: "clock.fill")
+                            .font(.caption2.bold())
+                            .foregroundStyle(.orange)
+                    }
+                }
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive, action: onDelete) { Label("Elimina", systemImage: "trash") }
+            Button(action: onEdit) { Label("Modifica", systemImage: "pencil") }.tint(.orange)
+        }
+    }
+
+    private func nextPaymentLabel(date: Date, isPast: Bool) -> String {
+        let df = DateFormatter()
+        df.dateFormat = "d MMM"
+        df.locale = Locale(identifier: "it_IT")
+        return (isPast ? "Atteso il " : "Prossimo ") + df.string(from: date).capitalized
+    }
+}
+
+// MARK: - Recurring Detail Sheet
+
+struct RecurringDetailSheet: View {
+    let item: RecurringPayment
+    @ObservedObject var viewModel: DashboardViewModel
+    var onEdit: () -> Void
+    var onDelete: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var showLinkPicker = false
+    @State private var showDeleteConfirm = false
+
+    private var linkedTransactions: [Transaction] {
+        viewModel.transactions.filter { $0.recurringId == item.id }.sorted { $0.date > $1.date }
+    }
+
+    private var effectiveAmount: Double {
+        item.lastLinkedAmount(linkedTransactions: linkedTransactions) ?? item.amount
+    }
+
+    var body: some View {
+        NavigationStack {
+            List {
+                // Header
+                Section {
+                    HStack(spacing: 16) {
+                        CategoryIconView(categoryName: item.category, size: 52, showBackground: true)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.name).font(.title3.bold())
+                            HStack(spacing: 6) {
+                                Image(systemName: item.recurringTiming.systemImage)
+                                Text(item.recurringTiming.label)
+                                Text("· giorno \(item.recurringDate)")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .font(.caption)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text((item.type == .expense ? "-" : "+") + effectiveAmount.euroFormatted)
+                                .font(.title3.bold())
+                                .foregroundStyle(item.type == .expense ? Color.expense : Color.income)
+                            Text("≈ \(item.effectiveMonthlyCost(linkedTransactions: linkedTransactions).euroFormatted)/mese")
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+
+                    if let nextDate = item.nextPaymentDate(linkedTransactions: linkedTransactions) {
+                        let isPast = nextDate < Date()
+                        let formatted = nextDateFormatted(nextDate)
+                        Label((isPast ? "Atteso il " : "Prossimo ") + formatted,
+                              systemImage: isPast ? "exclamationmark.circle.fill" : "calendar.badge.clock")
+                            .font(.subheadline)
+                            .foregroundStyle(isPast ? Color.expense : .secondary)
+                    }
+
+                    if let end = item.endDate, let endDateStr = formatEndDate(end) {
+                        Label("Termina il \(endDateStr)",
+                              systemImage: "calendar.badge.minus")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+
+                // Actions
+                Section {
+                    Button {
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { onEdit() }
+                    } label: {
+                        Label("Modifica", systemImage: "pencil")
+                    }
+
+                    Button {
+                        guard let id = item.id else { return }
+                        Task { await viewModel.updateRecurring(id: id, updates: ["isActive": !item.isActive]) }
+                        dismiss()
+                    } label: {
+                        Label(item.isActive ? "Disattiva" : "Riattiva",
+                              systemImage: item.isActive ? "pause.circle" : "play.circle")
+                    }
+                    .foregroundStyle(item.isActive ? .orange : .green)
+
+                    Button(role: .destructive) {
+                        showDeleteConfirm = true
+                    } label: {
+                        Label("Elimina", systemImage: "trash")
+                    }
+                }
+
+                // Linked transactions
+                Section {
+                    if linkedTransactions.isEmpty {
+                        VStack(spacing: 8) {
+                            Image(systemName: "link.badge.plus").font(.largeTitle).foregroundStyle(.secondary)
+                            Text("Nessuna transazione collegata")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                    } else {
+                        ForEach(linkedTransactions) { tx in
+                            NavigationLink(value: tx) {
+                                HStack(spacing: 10) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(tx.description.isEmpty ? tx.category : tx.description)
+                                            .font(.subheadline).lineLimit(1)
+                                        Text(String(tx.date.prefix(10)))
+                                            .font(.caption2).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text((tx.type == .expense ? "-" : "+") + tx.amount.euroFormatted)
+                                        .font(.subheadline.bold())
+                                        .foregroundStyle(tx.type == .expense ? Color.expense : Color.income)
                                 }
-                                Spacer()
-                                Text(tx.amount.euroFormatted)
-                                    .font(.caption.bold())
-                                    .foregroundStyle(tx.type == .expense ? Color.expense : Color.income)
-                                Button { onUnlinkTransaction(tx) } label: {
-                                    Image(systemName: "xmark.circle.fill")
-                                        .foregroundStyle(.secondary)
-                                        .font(.caption)
-                                }
-                                .buttonStyle(.plain)
+                                .padding(.vertical, 2)
                             }
                         }
-                        if linkedTransactions.count > 5 {
-                            Text("+ altri \(linkedTransactions.count - 5)…")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        showLinkPicker = true
+                    } label: {
+                        Label("Collega transazione", systemImage: "link.badge.plus")
+                            .font(.subheadline)
+                    }
+                } header: {
+                    Text("Transazioni passate (\(linkedTransactions.count))")
+                }
+            }
+            .navigationTitle(item.name)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .navigationDestination(for: Transaction.self) { tx in
+                TransactionDetailView(transaction: tx, viewModel: viewModel)
+            }
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Chiudi") { dismiss() }
+                }
+            }
+            .sheet(isPresented: $showLinkPicker) {
+                LinkTransactionSheet(
+                    recurringName: item.name,
+                    candidates: viewModel.transactions.filter { $0.recurringId == nil },
+                    onLink: { tx in
+                        if let rid = item.id {
+                            Task { await viewModel.linkTransaction(recurringId: rid, transactionId: tx.id ?? "") }
                         }
                     }
+                )
+            }
+            .confirmationDialog("Eliminare \"\(item.name)\"?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                Button("Elimina", role: .destructive) {
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { onDelete() }
                 }
-                .padding(.bottom, 6)
+                Button("Annulla", role: .cancel) {}
             }
         }
-        .sheet(isPresented: $showLinkPicker) {
-            LinkTransactionSheet(
-                recurringName: item.name,
-                candidates: allTransactions.filter { $0.recurringId == nil },
-                onLink: onLinkTransaction
-            )
-        }
+    }
+
+    private func nextDateFormatted(_ date: Date) -> String {
+        let df = DateFormatter()
+        df.dateFormat = "d MMMM yyyy"
+        df.locale = Locale(identifier: "it_IT")
+        return df.string(from: date)
+    }
+
+    private func formatEndDate(_ end: String) -> String? {
+        let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd"; df.locale = Locale(identifier: "en_US_POSIX")
+        guard let d = df.date(from: end) else { return nil }
+        let display = DateFormatter(); display.dateFormat = "d MMMM yyyy"; display.locale = Locale(identifier: "it_IT")
+        return display.string(from: d)
     }
 }
 
