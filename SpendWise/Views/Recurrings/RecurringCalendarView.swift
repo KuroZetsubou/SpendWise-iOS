@@ -119,7 +119,7 @@ struct RecurringCalendarView: View {
                     .padding(.bottom, 4)
                 }
                 .padding(.vertical, 4)
-                .background(.background)
+                .background(DS.Colors.surfaceCard)
 
                 Divider()
 
@@ -217,7 +217,7 @@ struct RecurringCalendarView: View {
                 .padding(.bottom, 16)
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(DS.Colors.bgApp)
     }
 }
 

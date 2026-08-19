@@ -118,6 +118,8 @@ struct EnableBankingSettingsView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(DS.Colors.bgApp)
         .navigationTitle("Open Banking")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

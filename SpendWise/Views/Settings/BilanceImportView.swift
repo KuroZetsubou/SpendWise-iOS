@@ -213,6 +213,8 @@ struct BilanceImportView: View {
                 }
             }
             .interactiveDismissDisabled(isImporting)
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Importa da Bilance")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

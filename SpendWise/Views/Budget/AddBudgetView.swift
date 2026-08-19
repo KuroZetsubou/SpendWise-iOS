@@ -54,6 +54,8 @@ struct AddBudgetView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle(isEditing ? "Modifica Budget" : "Nuovo Budget")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

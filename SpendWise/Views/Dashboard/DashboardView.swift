@@ -1,43 +1,44 @@
 import SwiftUI
-import Charts
 
 struct DashboardView: View {
     @ObservedObject var viewModel: DashboardViewModel
+    var onOpenSettings: (() -> Void)? = nil
+
     @State private var showAddTransaction = false
     @State private var transactionToEdit: Transaction?
-    @State private var chartSelection: String? = nil
-    @GestureState private var dragOffset: CGFloat = 0
+    @State private var balanceHidden = false
+    @State private var chartIndex = 0
+    @State private var chartMode: ChartMode = .expenses
+
+    private enum ChartMode: Hashable { case expenses, income }
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(spacing: 16) {
-                    monthHeaderView
-                    statsGrid
+                VStack(spacing: DS.Space.sectionGap) {
+                    heroHeader
 
-                    if !viewModel.monthlyChartData.isEmpty {
-                        monthlyBarChart
+                    VStack(spacing: DS.Space.sectionGap) {
+                        statsGrid
+                        if !viewModel.monthlyChartData.isEmpty { monthlyChart }
+                        recentTransactionsSection
                     }
-
-                    recentTransactionsSection
+                    .dsGutter()
                 }
-                .padding(.vertical, 8)
+                .padding(.bottom, DS.Space.x8)
             }
-            .navigationTitle("Dashboard")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showAddTransaction = true } label: {
-                        Image(systemName: "plus.circle.fill").font(.title3)
-                    }
-                }
+            .scrollIndicators(.hidden)
+            .background(DS.Colors.bgApp)
+            .ignoresSafeArea(edges: .top)
+            .navigationDestination(for: Transaction.self) { tx in
+                TransactionDetailView(transaction: tx, viewModel: viewModel)
             }
             .gesture(
                 DragGesture(minimumDistance: 40)
                     .onEnded { value in
                         let horizontal = value.translation.width
-                        let vertical = abs(value.translation.height)
-                        guard abs(horizontal) > vertical else { return }
-                        withAnimation(.easeInOut(duration: 0.25)) {
+                        guard abs(horizontal) > abs(value.translation.height) else { return }
+                        withAnimation(DS.Motion.standard) {
                             if horizontal < 0 { viewModel.goToPreviousMonth() }
                             else             { viewModel.goToNextMonth() }
                         }
@@ -60,206 +61,241 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Month Header (with navigation arrows)
+    // MARK: - Hero header
+    //
+    // The navy gradient panel bleeds to the edges and full width, carrying the greeting,
+    // the month balance and the month stepper.
 
-    private var monthHeaderView: some View {
-        HStack(spacing: 12) {
-            // Back arrow
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) { viewModel.goToPreviousMonth() }
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(viewModel.canGoBack ? .primary : .tertiary)
-            }
-            .disabled(!viewModel.canGoBack)
-
-            VStack(spacing: 2) {
-                Text(viewModel.selectedMonthLabel)
-                    .font(.title3.bold())
-                    .animation(.none, value: viewModel.selectedMonthOffset)
-                HStack(spacing: 4) {
-                    Text("saldo:")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(viewModel.currentMonthBalance.euroFormatted)
-                        .font(.caption.bold())
-                        .foregroundStyle(viewModel.currentMonthBalance >= 0 ? Color.income : Color.expense)
+    private var heroHeader: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x5) {
+            HStack(spacing: DS.Space.x3) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ciao!").dsText(DS.Font.h2, color: DS.Colors.textOnDark)
+                    Text("Ecco il quadro del mese")
+                        .dsText(DS.Font.meta, color: DS.Colors.textOnDarkMuted)
                 }
-                // Projected end-of-month balance (only for current month, only if recurrings exist)
-                if viewModel.isCurrentMonth && !viewModel.activeRecurrings.isEmpty {
-                    let projected = viewModel.projectedMonthEndBalance
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.caption2)
-                        Text("previsto fine mese: \(projected.euroFormatted)")
-                            .font(.caption2)
-                    }
-                    .foregroundStyle(projected >= 0 ? Color.income.opacity(0.8) : Color.expense.opacity(0.8))
+                Spacer(minLength: DS.Space.x2)
+                if let onOpenSettings {
+                    DSIconButton("gearshape", tone: .onDark, size: 44, action: onOpenSettings)
                 }
             }
-            .frame(maxWidth: .infinity)
 
-            // Forward arrow (disabled if current month)
-            Button {
-                withAnimation(.easeInOut(duration: 0.25)) { viewModel.goToNextMonth() }
-            } label: {
-                Image(systemName: "chevron.right")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(viewModel.canGoForward ? .primary : .tertiary)
-            }
-            .disabled(!viewModel.canGoForward)
+            DSBalanceHeader(
+                label: "Saldo di \(viewModel.selectedMonthLabel)",
+                amount: viewModel.currentMonthBalance.dsAmount,
+                caption: projectionCaption,
+                isHidden: $balanceHidden
+            )
+
+            monthStepper
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
-        .overlay(alignment: .bottom) {
-            if !viewModel.isCurrentMonth {
-                Text("Scorri o usa le frecce per navigare")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                    .offset(y: 18)
-            }
-        }
+        .padding(.horizontal, DS.Space.gutter)
+        .padding(.top, DS.Space.x16)
+        .padding(.bottom, DS.Space.x6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.Gradients.hero)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 0, bottomLeadingRadius: DS.Radius.xl2,
+                bottomTrailingRadius: DS.Radius.xl2, topTrailingRadius: 0,
+                style: .continuous
+            )
+        )
     }
 
-    // MARK: - Stats Grid
+    private var projectionCaption: String? {
+        guard viewModel.isCurrentMonth, !viewModel.activeRecurrings.isEmpty else { return nil }
+        return "Previsto a fine mese • \(viewModel.projectedMonthEndBalance.dsAmount)"
+    }
+
+    private var monthStepper: some View {
+        HStack(spacing: DS.Space.x2) {
+            stepperButton(icon: "chevron.left", enabled: viewModel.canGoBack) {
+                viewModel.goToPreviousMonth()
+            }
+
+            Text(viewModel.selectedMonthLabel.capitalized)
+                .dsText(DS.Font.labelBold, color: DS.Colors.textOnDark)
+                .frame(maxWidth: .infinity)
+
+            stepperButton(icon: "chevron.right", enabled: viewModel.canGoForward) {
+                viewModel.goToNextMonth()
+            }
+        }
+        .padding(.horizontal, DS.Space.x2)
+        .padding(.vertical, DS.Space.x2)
+        .background(DS.Colors.scrimOnDark)
+        .clipShape(Capsule())
+    }
+
+    private func stepperButton(icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(DS.Motion.standard) { action() }
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(DS.Colors.textOnDark)
+                .frame(width: 30, height: 30)
+                .background(DS.Colors.scrimOnDark)
+                .clipShape(Circle())
+                .opacity(enabled ? 1 : 0.45)
+        }
+        .buttonStyle(DSPressStyle())
+        .disabled(!enabled)
+    }
+
+    // MARK: - Stats
 
     private var statsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            StatCardView(
-                title: "Entrate",
-                value: viewModel.currentMonthIncome.euroFormatted,
-                icon: "arrow.down.circle.fill",
-                color: Color.income
-            )
-            StatCardView(
-                title: "Uscite",
-                value: viewModel.currentMonthExpenses.euroFormatted,
-                icon: "arrow.up.circle.fill",
-                color: Color.expense
-            )
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: DS.Space.rowGap),
+                            GridItem(.flexible(), spacing: DS.Space.rowGap)],
+                  spacing: DS.Space.rowGap) {
+            DSStatTile(title: "Entrate",
+                       value: viewModel.currentMonthIncome.dsAmount,
+                       icon: "arrow.down.left",
+                       tint: DS.Colors.income)
+            DSStatTile(title: "Uscite",
+                       value: viewModel.currentMonthExpenses.dsAmount,
+                       icon: "arrow.up.right",
+                       tint: DS.Colors.expense)
             if !viewModel.bankAccounts.isEmpty {
-                StatCardView(
-                    title: "Saldo Bancario",
-                    value: viewModel.totalBankBalance.euroFormatted,
-                    icon: "building.columns",
-                    color: .appPrimary,
-                    subtitle: "\(viewModel.bankAccounts.filter { !$0.isExcluded }.count) conto/i"
+                DSStatTile(title: "Saldo bancario",
+                           value: viewModel.totalBankBalance.dsAmount,
+                           icon: "building.columns",
+                           tint: DS.Colors.actionPrimary,
+                           subtitle: "\(viewModel.bankAccounts.filter { !$0.isExcluded }.count) conti attivi")
+            }
+            DSStatTile(title: "Transazioni",
+                       value: "\(viewModel.currentMonthTransactions.count)",
+                       icon: "list.bullet",
+                       tint: DS.Palette.purple500)
+        }
+    }
+
+    // MARK: - Monthly chart
+
+    private var chartBars: [DSBarItem] {
+        let wanted = chartMode == .expenses ? "Uscite" : "Entrate"
+        return viewModel.monthlyChartData
+            .filter { $0.type == wanted }
+            .map { DSBarItem(label: String($0.month.prefix(3)),
+                             value: $0.amount,
+                             display: $0.amount.dsAmountCompact) }
+    }
+
+    private var monthlyChart: some View {
+        DSStatCard(
+            title: "Ultimi 6 mesi",
+            caption: chartMode == .expenses ? "Totale uscite" : "Totale entrate",
+            value: chartBars.indices.contains(chartIndex)
+                ? chartBars[chartIndex].value.dsAmount
+                : nil,
+            delta: chartDelta,
+            deltaTone: chartDeltaIsPositive ? .success : .danger
+        ) {
+            VStack(spacing: DS.Space.x4) {
+                DSSegmentedTabs(
+                    options: [(.expenses, "Uscite"), (.income, "Entrate")],
+                    selection: $chartMode
+                )
+                DSBarChart(
+                    data: chartBars,
+                    activeIndex: $chartIndex,
+                    height: 140,
+                    color: chartMode == .expenses ? DS.Colors.expense : DS.Colors.income
                 )
             }
-            StatCardView(
-                title: "Transazioni",
-                value: "\(viewModel.currentMonthTransactions.count)",
-                icon: "list.bullet.rectangle",
-                color: .appSecondary
-            )
         }
-        .padding(.horizontal)
+        .onAppear { chartIndex = max(chartBars.count - 1, 0) }
+        .onChange(of: chartMode) { _, _ in chartIndex = max(chartBars.count - 1, 0) }
     }
 
-    // MARK: - Monthly Grouped Bar Chart (last 6 months)
-
-    private var monthlyBarChart: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Ultimi 6 mesi")
-                .font(.headline)
-                .padding(.horizontal)
-
-            Chart(viewModel.monthlyChartData) { item in
-                BarMark(
-                    x: .value("Mese", item.month),
-                    y: .value("Importo", item.amount),
-                    width: .ratio(0.4)
-                )
-                .foregroundStyle(by: .value("Tipo", item.type))
-                .position(by: .value("Tipo", item.type))
-                .cornerRadius(4)
-
-                if let sel = chartSelection, sel == item.month {
-                    RuleMark(x: .value("Mese", sel))
-                        .foregroundStyle(.secondary.opacity(0.3))
-                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [4]))
-                        .annotation(position: .top, spacing: 4) {
-                            chartTooltip(for: sel)
-                        }
-                }
-            }
-            .chartForegroundStyleScale([
-                "Entrate": Color.income,
-                "Uscite": Color.expense
-            ])
-            .chartLegend(position: .bottom, alignment: .center)
-            .chartXSelection(value: $chartSelection)
-            .frame(height: 220)
-            .padding(.horizontal)
-        }
-        .cardStyle()
-        .padding(.horizontal)
+    /// Month-over-month change on the selected column.
+    private var chartDeltaValue: Double? {
+        let bars = chartBars
+        guard bars.indices.contains(chartIndex), chartIndex > 0 else { return nil }
+        let previous = bars[chartIndex - 1].value
+        guard previous > 0 else { return nil }
+        return (bars[chartIndex].value - previous) / previous * 100
     }
 
-    private func chartTooltip(for month: String) -> some View {
-        let items = viewModel.monthlyChartData.filter { $0.month == month }
-        let income  = items.first(where: { $0.type == "Entrate" })?.amount ?? 0
-        let expense = items.first(where: { $0.type == "Uscite"  })?.amount ?? 0
-        return VStack(alignment: .leading, spacing: 4) {
-            Text(month).font(.caption.bold())
-            HStack(spacing: 6) {
-                Circle().fill(Color.income).frame(width: 8, height: 8)
-                Text(income.euroFormatted).font(.caption)
-            }
-            HStack(spacing: 6) {
-                Circle().fill(Color.expense).frame(width: 8, height: 8)
-                Text(expense.euroFormatted).font(.caption)
-            }
-            Divider()
-            Text((income - expense).euroFormatted)
-                .font(.caption.bold())
-                .foregroundStyle(income >= expense ? Color.income : Color.expense)
-        }
-        .padding(8)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
-        .shadow(radius: 4)
+    private var chartDelta: String? {
+        guard let delta = chartDeltaValue else { return nil }
+        return (delta >= 0 ? "+" : "-") + abs(delta).dsPercent
     }
 
-    // MARK: - Recent Transactions
+    /// Spending more is a bad delta; earning more is a good one.
+    private var chartDeltaIsPositive: Bool {
+        guard let delta = chartDeltaValue else { return true }
+        return chartMode == .expenses ? delta <= 0 : delta >= 0
+    }
+
+    // MARK: - Recent transactions
 
     private var recentTransactionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Transazioni recenti")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal)
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSSectionHeader("Transazioni Recenti",
+                            actionTitle: viewModel.recentTransactions.isEmpty ? nil : "Vedi Tutte",
+                            action: { viewModel.selectedTab = .transactions })
 
             if viewModel.recentTransactions.isEmpty {
-                ContentUnavailableView {
-                    Label("Nessuna transazione", systemImage: "tray")
-                } description: {
-                    Text("Aggiungi la tua prima transazione con il pulsante +")
-                }
-                .padding()
+                DSEmptyState(
+                    icon: "tray",
+                    title: "Nessuna Transazione",
+                    message: "Aggiungi il primo movimento con il pulsante blu in basso.",
+                    actionTitle: "Aggiungi Movimento",
+                    action: { showAddTransaction = true }
+                )
             } else {
-                LazyVStack(spacing: 0) {
+                LazyVStack(spacing: DS.Space.rowGap) {
                     ForEach(viewModel.recentTransactions) { tx in
-                        TransactionRowView(
-                            transaction: tx,
-                            onDelete: {
+                        NavigationLink(value: tx) {
+                            DSTransactionRow(
+                                name: tx.displayTitle,
+                                meta: tx.dsMetaParts,
+                                amount: tx.amount.dsSignedAmount(isIncome: tx.type == .income),
+                                isIncome: tx.type == .income,
+                                dimmed: tx.isIgnored
+                            ) {
+                                CategoryIconView(categoryName: tx.category, size: 22,
+                                                 showBackground: false)
+                            }
+                        }
+                        .buttonStyle(DSPressStyle())
+                        .contextMenu {
+                            Button("Modifica", systemImage: "pencil") { transactionToEdit = tx }
+                            Button("Elimina", systemImage: "trash", role: .destructive) {
                                 if let id = tx.id {
                                     Task { await viewModel.deleteTransaction(id: id) }
                                 }
-                            },
-                            onEdit: { transactionToEdit = tx }
-                        )
-                        .padding(.horizontal)
-                        Divider().padding(.leading, 60)
+                            }
+                        }
                     }
                 }
             }
         }
-        .padding(.bottom, 8)
+    }
+}
+
+// MARK: - Row copy helpers
+
+extension Transaction {
+    /// Row title: the description, falling back to the category.
+    var displayTitle: String {
+        description.isEmpty ? category : description
+    }
+
+    /// "Cibo & Spesa • 3 mag" — two facts joined by a dot separator.
+    var dsMetaParts: [String] {
+        var parts = [category]
+        if let sub = subCategory, !sub.isEmpty { parts.append(sub) }
+        if let date = date.asDate {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "it_IT")
+            f.dateFormat = "d MMM"
+            parts.append(f.string(from: date))
+        }
+        return parts
     }
 }
 

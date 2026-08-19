@@ -157,6 +157,8 @@ struct TradeRepublicImportView: View {
                 }
             }
             .interactiveDismissDisabled(isImporting)
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Trade Republic")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

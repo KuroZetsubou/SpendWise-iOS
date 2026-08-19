@@ -1,5 +1,4 @@
 import SwiftUI
-import Charts
 
 struct InsightsView: View {
     @ObservedObject var viewModel: DashboardViewModel
@@ -21,34 +20,30 @@ struct InsightsView: View {
         return f.string(from: selectedDate).capitalized
     }
 
+    private var breakdown: [CategoryBreakdown] {
+        viewModel.expenseCategoryBreakdown(for: selectedDate)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
-                LazyVStack(spacing: 20) {
-                    monthNavigator
-                    expensePieChart
-                    monthlySavingsSection
-                    categoryListSection
-                    recurringSection
-                    aiInsightsSection
-                }
-                .padding(.vertical, 8)
-            }
-            .navigationTitle("Insights")
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await viewModel.loadInsights() }
-                    } label: {
-                        if viewModel.isLoadingInsights {
-                            ProgressView().scaleEffect(0.8)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
+                VStack(spacing: DS.Space.sectionGap) {
+                    heroHeader
+
+                    VStack(spacing: DS.Space.sectionGap) {
+                        savingsSummary
+                        quickAccess
+                        categoryListSection
+                        recurringSection
+                        aiInsightsSection
                     }
-                    .disabled(viewModel.isLoadingInsights)
+                    .dsGutter()
                 }
+                .padding(.bottom, DS.Space.x8)
             }
+            .scrollIndicators(.hidden)
+            .background(DS.Colors.bgApp)
+            .ignoresSafeArea(edges: .top)
             .onChange(of: viewModel.errorMessage) { _, msg in showError = msg != nil }
             .alert("Errore", isPresented: $showError) {
                 Button("OK") { viewModel.dismissError() }
@@ -65,367 +60,337 @@ struct InsightsView: View {
         }
     }
 
-    // MARK: - Month Navigator
+    // MARK: - Hero
+    //
+    // The kit's Budget screen: the donut sits on the navy gradient, total in the centre,
+    // segments in category colors.
 
-    private var monthNavigator: some View {
-        HStack(spacing: 16) {
-            Button { withAnimation { insightsMonthOffset -= 1 } } label: {
-                Image(systemName: "chevron.left")
-                    .font(.title3.bold())
-                    .foregroundStyle(canGoBack ? .primary : .secondary)
+    private var heroHeader: some View {
+        VStack(spacing: DS.Space.x5) {
+            HStack(spacing: DS.Space.x3) {
+                Text("Report").dsText(DS.Font.h2, color: DS.Colors.textOnDark)
+                Spacer(minLength: DS.Space.x2)
+                DSIconButton(viewModel.isLoadingInsights ? "hourglass" : "arrow.clockwise",
+                             tone: .onDark, size: 44) {
+                    Task { await viewModel.loadInsights() }
+                }
+                .disabled(viewModel.isLoadingInsights)
             }
-            .disabled(!canGoBack)
 
-            Text(monthLabel)
-                .font(.headline)
-                .frame(minWidth: 160)
-                .multilineTextAlignment(.center)
+            monthStepper
 
-            Button { withAnimation { insightsMonthOffset += 1 } } label: {
-                Image(systemName: "chevron.right")
-                    .font(.title3.bold())
-                    .foregroundStyle(canGoForward ? .primary : .secondary)
+            if breakdown.isEmpty {
+                VStack(spacing: DS.Space.x2) {
+                    Image(systemName: "chart.pie")
+                        .font(.system(size: 34, weight: .light))
+                        .foregroundStyle(DS.Colors.textOnDarkMuted)
+                    Text("Nessuna uscita in \(monthLabel)")
+                        .dsText(DS.Font.body, color: DS.Colors.textOnDarkMuted)
+                }
+                .padding(.vertical, DS.Space.x8)
+            } else {
+                DSDonutChart(
+                    segments: donutSegments,
+                    total: totalExpenses.dsAmount,
+                    label: "Uscite totali",
+                    size: 210,
+                    thickness: 20,
+                    onDark: true
+                )
+                .padding(.vertical, DS.Space.x2)
+
+                DSDonutLegend(segments: donutSegments.prefix(4).map { $0 },
+                              onDark: true) { $0.dsAmount }
             }
-            .disabled(!canGoForward)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, DS.Space.gutter)
+        .padding(.top, DS.Space.x16)
+        .padding(.bottom, DS.Space.x6)
+        .frame(maxWidth: .infinity)
+        .background(DS.Gradients.hero)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 0, bottomLeadingRadius: DS.Radius.xl2,
+                bottomTrailingRadius: DS.Radius.xl2, topTrailingRadius: 0,
+                style: .continuous
+            )
+        )
+    }
+
+    private var totalExpenses: Double {
+        breakdown.reduce(0) { $0 + $1.amount }
+    }
+
+    private var donutSegments: [DSDonutSegment] {
+        breakdown.map {
+            DSDonutSegment(label: $0.category, value: $0.amount, color: Color(hex: $0.color))
+        }
+    }
+
+    private var monthStepper: some View {
+        HStack(spacing: DS.Space.x2) {
+            stepperButton(icon: "chevron.left", enabled: canGoBack) { insightsMonthOffset -= 1 }
+            Text(monthLabel)
+                .dsText(DS.Font.labelBold, color: DS.Colors.textOnDark)
+                .frame(maxWidth: .infinity)
+            stepperButton(icon: "chevron.right", enabled: canGoForward) { insightsMonthOffset += 1 }
+        }
+        .padding(DS.Space.x2)
+        .background(DS.Colors.scrimOnDark)
+        .clipShape(Capsule())
         .gesture(
             DragGesture(minimumDistance: 40)
                 .onEnded { v in
-                    if v.translation.width > 0, canGoBack { withAnimation { insightsMonthOffset -= 1 } }
-                    else if v.translation.width < 0, canGoForward { withAnimation { insightsMonthOffset += 1 } }
+                    if v.translation.width > 0, canGoBack {
+                        withAnimation(DS.Motion.standard) { insightsMonthOffset -= 1 }
+                    } else if v.translation.width < 0, canGoForward {
+                        withAnimation(DS.Motion.standard) { insightsMonthOffset += 1 }
+                    }
                 }
         )
     }
 
-    // MARK: - Expense Pie Chart
-
-    private var expensePieChart: some View {
-        let breakdown = viewModel.expenseCategoryBreakdown(for: selectedDate)
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("Uscite per categoria")
-                .font(.headline)
-                .padding(.horizontal)
-
-            if breakdown.isEmpty {
-                Text("Nessuna uscita in \(monthLabel)")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            } else {
-                Chart(breakdown) { item in
-                    SectorMark(
-                        angle: .value("Importo", item.amount),
-                        innerRadius: .ratio(0.55),
-                        angularInset: 2
-                    )
-                    .foregroundStyle(Color(hex: item.color))
-                    .cornerRadius(4)
-                    .annotation(position: .overlay) {
-                        if item.percentage > 8 {
-                            Text(item.percentage.percentFormatted)
-                                .font(.caption2.bold())
-                                .foregroundStyle(.white)
-                        }
-                    }
-                }
-                .frame(height: 240)
-                .padding(.horizontal)
-
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                    ForEach(breakdown) { item in
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color(hex: item.color))
-                                .frame(width: 10, height: 10)
-                            Text(item.category)
-                                .font(.caption)
-                                .lineLimit(1)
-                            Spacer()
-                            Text(item.amount.euroFormatted)
-                                .font(.caption.bold())
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
+    private func stepperButton(icon: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            withAnimation(DS.Motion.standard) { action() }
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(DS.Colors.textOnDark)
+                .frame(width: 30, height: 30)
+                .background(DS.Colors.scrimOnDark)
+                .clipShape(Circle())
+                .opacity(enabled ? 1 : 0.45)
         }
-        .cardStyle()
-        .padding(.horizontal)
+        .buttonStyle(DSPressStyle())
+        .disabled(!enabled)
     }
 
-    // MARK: - Recurring Payments
+    // MARK: - Savings summary
 
-    private var recurringSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Pagamenti ricorrenti", systemImage: "repeat.circle.fill")
-                    .font(.headline)
-                Spacer()
-                NavigationLink {
-                    RecurringsView(viewModel: viewModel)
-                } label: {
-                    Text("Vedi tutti")
-                        .font(.caption)
-                        .foregroundStyle(.primary)
+    private var savingsSummary: some View {
+        let income   = viewModel.monthlyIncomeTotal(for: selectedDate)
+        let expenses = viewModel.monthlyExpensesTotal(for: selectedDate)
+        let savings  = income - expenses
+        let ratio    = income > 0 ? min(max(savings / income, 0), 1) : 0
+
+        return DSStatCard(
+            title: "Riepilogo del Mese",
+            caption: "Risparmio netto",
+            value: savings.dsSignedAmount(isIncome: savings >= 0),
+            delta: income > 0 ? "\(Int(ratio * 100))% risparmiato" : nil,
+            deltaTone: ratio >= 0.2 ? .success : (savings >= 0 ? .warning : .danger)
+        ) {
+            VStack(spacing: DS.Space.x4) {
+                HStack(spacing: DS.Space.rowGap) {
+                    DSCashflowRow(label: "Entrate", amount: income.dsAmount,
+                                  isIncome: true,
+                                  fraction: income > 0 ? 1 : 0)
+                    DSCashflowRow(label: "Uscite", amount: expenses.dsAmount,
+                                  isIncome: false,
+                                  fraction: income > 0 ? min(expenses / income, 1) : 1)
+                }
+                .padding(.bottom, DS.Space.x2)
+
+                if income > 0 {
+                    DSProgressBar(
+                        value: ratio,
+                        color: ratio >= 0.2 ? DS.Colors.income
+                             : (savings >= 0 ? DS.Palette.amber500 : DS.Colors.expense),
+                        leftLabel: "Tasso di risparmio",
+                        rightLabel: "\(Int(ratio * 100))%"
+                    )
                 }
             }
-            .padding(.horizontal)
+        }
+    }
+
+    // MARK: - Quick access
+    //
+    // Two-up tile grid, 12pt gap — the kit's services grid shape.
+
+    private var quickAccess: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: DS.Space.rowGap),
+                            GridItem(.flexible(), spacing: DS.Space.rowGap)],
+                  spacing: DS.Space.rowGap) {
+            NavigationLink {
+                BudgetsView(viewModel: viewModel)
+            } label: {
+                quickTile(icon: "chart.bar.xaxis", title: "Budget",
+                          caption: "\(viewModel.budgets.filter { $0.isActive }.count) attivi")
+            }
+            .buttonStyle(DSPressStyle())
+
+            NavigationLink {
+                RecurringCalendarView(viewModel: viewModel)
+            } label: {
+                quickTile(icon: "calendar", title: "Calendario",
+                          caption: "Pagamenti in scadenza")
+            }
+            .buttonStyle(DSPressStyle())
+        }
+    }
+
+    private func quickTile(icon: String, title: String, caption: String) -> some View {
+        VStack(alignment: .leading, spacing: DS.Space.x2 + 2) {
+            DSIconTile(icon, size: 40)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).dsText(DS.Font.h3, color: DS.Colors.textHeading)
+                Text(caption).dsText(DS.Font.meta, color: DS.Colors.textMuted).lineLimit(1)
+            }
+        }
+        .padding(DS.Space.cardPad)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.Colors.surfaceSunken)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+    }
+
+    // MARK: - Category list
+
+    private var categoryListSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSSectionHeader("Categorie del Mese")
+
+            if breakdown.isEmpty {
+                DSEmptyState(icon: "square.grid.2x2",
+                             title: "Nessuna Spesa",
+                             message: "Non ci sono uscite registrate in \(monthLabel).")
+            } else {
+                VStack(spacing: DS.Space.rowGap) {
+                    ForEach(breakdown) { item in
+                        Button {
+                            selectedCategoryDrilldown = item
+                        } label: {
+                            categoryRow(item: item, max: breakdown.first?.amount ?? 1)
+                        }
+                        .buttonStyle(DSPressStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    private func categoryRow(item: CategoryBreakdown, max: Double) -> some View {
+        let tint = Color(hex: item.color)
+        return HStack(spacing: DS.Space.x3) {
+            DSIconTile(AppCategory.categoryIcons[item.category] ?? "tag",
+                       size: 42, background: tint.opacity(0.12), foreground: tint)
+
+            VStack(alignment: .leading, spacing: DS.Space.x1 + 2) {
+                HStack {
+                    Text(item.category)
+                        .dsText(DS.Font.bodyMedium, color: DS.Colors.textBody)
+                        .lineLimit(1)
+                    Spacer(minLength: DS.Space.x2)
+                    Text(item.amount.dsAmount)
+                        .dsText(DS.Font.labelBold, color: DS.Colors.textHeading)
+                }
+                DSProgressBar(value: max > 0 ? item.amount / max : 0, color: tint, height: 6)
+                Text(item.percentage.dsPercent + " del totale")
+                    .dsText(DS.Font.meta, color: DS.Colors.textMuted)
+            }
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(DS.Palette.gray400)
+        }
+        .padding(DS.Space.cardPad)
+        .background(DS.Colors.surfaceSunken)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+    }
+
+    // MARK: - Recurring payments
+
+    private var recurringSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSSectionHeader("Pagamenti Ricorrenti") {
+                if !viewModel.activeRecurrings.isEmpty {
+                    NavigationLink {
+                        RecurringsView(viewModel: viewModel)
+                    } label: {
+                        Text("Vedi Tutti").dsText(DS.Font.label, color: DS.Colors.textLink)
+                    }
+                }
+            }
 
             if viewModel.activeRecurrings.isEmpty {
-                Text("Nessun abbonamento attivo.\nAggiungili dal tab Abbonamenti.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding()
+                DSEmptyState(icon: "repeat",
+                             title: "Nessun Abbonamento",
+                             message: "Aggiungi i pagamenti ricorrenti per vedere il costo fisso mensile.")
             } else {
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Costo mensile")
-                            .font(.caption).foregroundStyle(.secondary)
-                        Text(viewModel.monthlyRecurringCost.euroFormatted)
-                            .font(.title3.bold()).foregroundStyle(Color.expense)
-                    }
-                    Spacer()
-                    Text("\(viewModel.activeRecurrings.count) abbonamenti")
-                        .font(.caption)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Color.primary.opacity(0.1))
-                        .foregroundStyle(.primary)
-                        .clipShape(Capsule())
-                }
-                .padding(.horizontal)
-
-                Divider().padding(.horizontal)
-
-                ForEach(viewModel.activeRecurrings.prefix(4)) { r in
-                    HStack(spacing: 12) {
-                        CategoryIconView(categoryName: r.category, size: 36, showBackground: true)
+                DSCard(.tint) {
+                    HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(r.name).font(.subheadline).lineLimit(1)
-                            Text(r.recurringTiming.label)
-                                .font(.caption).foregroundStyle(.secondary)
+                            Text("Costo mensile").dsText(DS.Font.meta, color: DS.Colors.textSecondary)
+                            Text(viewModel.monthlyRecurringCost.dsAmount)
+                                .dsText(DS.Font.Style(size: 22, weight: .bold, lineHeight: 28,
+                                                      trackingEm: -0.02),
+                                        color: DS.Colors.expense)
                         }
-                        Spacer()
-                        Text((r.type == .expense ? "-" : "+") + r.amount.euroFormatted)
-                            .font(.subheadline.bold())
-                            .foregroundStyle(r.type == .expense ? Color.expense : Color.income)
+                        Spacer(minLength: DS.Space.x2)
+                        DSBadge("\(viewModel.activeRecurrings.count) attivi", tone: .info)
                     }
-                    .padding(.horizontal)
-                    .padding(.vertical, 4)
+                }
+
+                VStack(spacing: DS.Space.rowGap) {
+                    ForEach(viewModel.activeRecurrings.prefix(4)) { r in
+                        DSTransactionRow(
+                            name: r.name,
+                            meta: [r.recurringTiming.label, r.category],
+                            amount: r.amount.dsSignedAmount(isIncome: r.type != .expense),
+                            isIncome: r.type != .expense
+                        ) {
+                            CategoryIconView(categoryName: r.category, size: 22,
+                                             showBackground: false)
+                        }
+                    }
                 }
 
                 if viewModel.activeRecurrings.count > 4 {
                     NavigationLink {
                         RecurringsView(viewModel: viewModel)
                     } label: {
-                        Text("Vedi altri \(viewModel.activeRecurrings.count - 4)…")
-                            .font(.caption)
-                            .foregroundStyle(.primary)
+                        Text("Vedi altri \(viewModel.activeRecurrings.count - 4)")
+                            .dsText(DS.Font.labelBold, color: DS.Colors.textLink)
                             .frame(maxWidth: .infinity)
-                            .padding(.bottom, 4)
+                            .padding(.vertical, DS.Space.x2)
                     }
                 }
             }
         }
-        .cardStyle()
-        .padding(.horizontal)
     }
 
-    private func frequencyLabel(_ freq: Transaction.RecurringFrequency?) -> String {
-        switch freq {
-        case .weekly:  return "Settimanale"
-        case .monthly: return "Mensile"
-        case .yearly:  return "Annuale"
-        case nil:      return "Ricorrente"
-        }
-    }
-
-    // MARK: - Category List
-
-    private var categoryListSection: some View {
-        let breakdown = viewModel.expenseCategoryBreakdown(for: selectedDate)
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("Categorie del mese")
-                .font(.headline)
-                .padding(.horizontal)
-
-            if breakdown.isEmpty {
-                Text("Nessuna spesa in \(monthLabel)")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(breakdown) { item in
-                        Button {
-                            selectedCategoryDrilldown = item
-                        } label: {
-                            categoryListRow(item: item, max: breakdown.first?.amount ?? 1)
-                        }
-                        .buttonStyle(.plain)
-                        if item.id != breakdown.last?.id {
-                            Divider().padding(.horizontal)
-                        }
-                    }
-                }
-                .padding(.horizontal)
-            }
-        }
-        .cardStyle()
-        .padding(.horizontal)
-    }
-
-    private func categoryListRow(item: CategoryBreakdown, max: Double) -> some View {
-        HStack(spacing: 12) {
-            CategoryIconView(categoryName: item.category, size: 36, showBackground: true)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(item.category)
-                        .font(.subheadline.bold())
-                        .lineLimit(1)
-                    Spacer()
-                    Text(item.amount.euroFormatted)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(Color.expense)
-                }
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(Color.secondary.opacity(0.12)).frame(height: 5)
-                        Capsule()
-                            .fill(Color(hex: item.color))
-                            .frame(width: geo.size.width * CGFloat(item.amount / max), height: 5)
-                    }
-                }
-                .frame(height: 5)
-                Text(item.percentage.percentFormatted + " del totale")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Image(systemName: "chevron.right")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.vertical, 8)
-    }
-
-
-
-    // MARK: - Monthly Savings
-
-    private var monthlySavingsSection: some View {
-        let income   = viewModel.monthlyIncomeTotal(for: selectedDate)
-        let expenses = viewModel.monthlyExpensesTotal(for: selectedDate)
-        let savings  = income - expenses
-        let ratio    = income > 0 ? min(max(savings / income, 0), 1) : 0
-
-        return VStack(alignment: .leading, spacing: 12) {
-            Text("Riepilogo del mese")
-                .font(.headline)
-                .padding(.horizontal)
-
-            HStack(spacing: 0) {
-                savingsTile(label: "Entrate", value: income, icon: "arrow.down.circle.fill", color: Color.income)
-                Divider()
-                savingsTile(label: "Uscite", value: expenses, icon: "arrow.up.circle.fill", color: Color.expense)
-                Divider()
-                VStack(spacing: 4) {
-                    Image(systemName: savings >= 0 ? "plus.circle.fill" : "minus.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(savings >= 0 ? Color.income : Color.expense)
-                    Text(savings >= 0 ? "+\(savings.euroFormatted)" : savings.euroFormatted)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(savings >= 0 ? Color.income : Color.expense)
-                    Text("Risparmio")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-            }
-
-            if income > 0 {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Tasso di risparmio")
-                            .font(.caption.bold())
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("\(Int(ratio * 100))%")
-                            .font(.caption.bold())
-                            .foregroundStyle(ratio >= 0.2 ? Color.income : ratio >= 0 ? .orange : Color.expense)
-                    }
-                    GeometryReader { geo in
-                        ZStack(alignment: .leading) {
-                            Capsule().fill(Color.secondary.opacity(0.12)).frame(height: 6)
-                            Capsule()
-                                .fill(ratio >= 0.2 ? Color.income : ratio >= 0 ? .orange : Color.expense)
-                                .frame(width: geo.size.width * CGFloat(ratio), height: 6)
-                        }
-                    }
-                    .frame(height: 6)
-                }
-                .padding(.horizontal)
-            }
-        }
-        .cardStyle()
-        .padding(.horizontal)
-    }
-
-    private func savingsTile(label: String, value: Double, icon: String, color: Color) -> some View {
-        VStack(spacing: 4) {
-            Image(systemName: icon).font(.title2).foregroundStyle(color)
-            Text(value.euroFormatted).font(.subheadline.bold())
-            Text(label).font(.caption2).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-    }
+    // MARK: - AI insights
 
     private var aiInsightsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Consigli AI", systemImage: "sparkles")
-                    .font(.headline)
-                Spacer()
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSSectionHeader("Consigli AI") {
                 if viewModel.isLoadingInsights {
-                    ProgressView().scaleEffect(0.8)
+                    ProgressView().scaleEffect(0.7).tint(DS.Colors.actionPrimary)
                 }
             }
-            .padding(.horizontal)
 
             if viewModel.insights.isEmpty && !viewModel.isLoadingInsights {
-                VStack(spacing: 12) {
-                    Image(systemName: "sparkles")
-                        .font(.largeTitle)
-                        .foregroundStyle(.secondary)
-                    Text("Tocca il pulsante aggiorna per ottenere consigli personalizzati basati sulle tue transazioni.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                    Button {
-                        Task { await viewModel.loadInsights() }
-                    } label: {
-                        Label("Genera Consigli", systemImage: "sparkles")
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding()
+                DSPromoBanner(
+                    title: "Analizza le Tue Spese",
+                    message: "Genera consigli personalizzati basati sulle tue transazioni per capire dove intervenire.",
+                    icon: "sparkles",
+                    actionTitle: "Genera Consigli",
+                    action: { Task { await viewModel.loadInsights() } }
+                )
             } else {
-                ForEach(viewModel.insights) { insight in
-                    InsightCardView(insight: insight)
-                        .padding(.horizontal)
+                VStack(spacing: DS.Space.rowGap) {
+                    ForEach(viewModel.insights) { insight in
+                        InsightCardView(insight: insight)
+                    }
                 }
             }
         }
-        .cardStyle()
-        .padding(.horizontal)
-        .padding(.bottom, 8)
     }
 }
 
 // MARK: - Category Transactions Sheet
+
 struct CategoryTransactionsSheet: View {
     let category: CategoryBreakdown
     let date: Date
@@ -451,44 +416,54 @@ struct CategoryTransactionsSheet: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    HStack(spacing: 16) {
-                        CategoryIconView(categoryName: category.category, size: 48, showBackground: true)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(category.category).font(.title3.bold())
-                            Text(monthLabel).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(category.amount.euroFormatted)
-                                .font(.title3.bold()).foregroundStyle(Color.expense)
-                            Text(category.percentage.percentFormatted)
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-
-                Section("\(transactions.count) transazioni") {
-                    ForEach(transactions) { tx in
-                        NavigationLink(value: tx) {
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(tx.description.isEmpty ? tx.category : tx.description)
-                                        .font(.subheadline).lineLimit(1)
-                                    Text(String(tx.date.prefix(10)))
-                                        .font(.caption2).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text("-" + tx.amount.euroFormatted)
-                                    .font(.subheadline.bold()).foregroundStyle(Color.expense)
+            ScrollView {
+                VStack(spacing: DS.Space.sectionGap) {
+                    DSCard(.card) {
+                        HStack(spacing: DS.Space.x4) {
+                            DSIconTile(AppCategory.categoryIcons[category.category] ?? "tag",
+                                       size: 48,
+                                       background: Color(hex: category.color).opacity(0.12),
+                                       foreground: Color(hex: category.color))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(category.category)
+                                    .dsText(DS.Font.h3, color: DS.Colors.textHeading)
+                                Text(monthLabel).dsText(DS.Font.meta, color: DS.Colors.textMuted)
                             }
-                            .padding(.vertical, 2)
+                            Spacer(minLength: DS.Space.x2)
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text(category.amount.dsAmount)
+                                    .dsText(DS.Font.h3, color: DS.Colors.expense)
+                                Text(category.percentage.dsPercent)
+                                    .dsText(DS.Font.meta, color: DS.Colors.textMuted)
+                            }
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: DS.Space.x4) {
+                        DSSectionHeader("\(transactions.count) Transazioni")
+                        LazyVStack(spacing: DS.Space.rowGap) {
+                            ForEach(transactions) { tx in
+                                NavigationLink(value: tx) {
+                                    DSTransactionRow(
+                                        name: tx.displayTitle,
+                                        meta: tx.dsMetaParts,
+                                        amount: tx.amount.dsSignedAmount(isIncome: false),
+                                        isIncome: false
+                                    ) {
+                                        CategoryIconView(categoryName: tx.category, size: 22,
+                                                         showBackground: false)
+                                    }
+                                }
+                                .buttonStyle(DSPressStyle())
+                            }
                         }
                     }
                 }
+                .dsGutter()
+                .padding(.vertical, DS.Space.x5)
             }
+            .scrollIndicators(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle(category.category)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -506,41 +481,31 @@ struct CategoryTransactionsSheet: View {
 }
 
 // MARK: - Insight Card
+
 struct InsightCardView: View {
     let insight: FinancialInsight
 
     private var impactColor: Color { Color(hex: insight.impact.color) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Image(systemName: "lightbulb.fill")
-                    .foregroundStyle(impactColor)
-                Text(insight.title)
-                    .font(.subheadline.bold())
-                    .lineLimit(2)
-                Spacer()
-                Text(insight.impact.label)
-                    .font(.caption.bold())
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(impactColor.opacity(0.15))
-                    .foregroundStyle(impactColor)
-                    .clipShape(Capsule())
+        DSCard(.card) {
+            VStack(alignment: .leading, spacing: DS.Space.x2 + 2) {
+                HStack(spacing: DS.Space.x3) {
+                    DSIconTile("lightbulb.fill", size: 36,
+                               background: impactColor.opacity(0.12), foreground: impactColor)
+                    Text(insight.title)
+                        .dsText(DS.Font.h3, color: DS.Colors.textHeading)
+                        .lineLimit(2)
+                    Spacer(minLength: DS.Space.x2)
+                }
+                Text(insight.advice)
+                    .dsText(DS.Font.body, color: DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                DSBadge(insight.impact.label, tone: .neutral)
             }
-            Text(insight.advice)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding()
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(impactColor.opacity(0.3), lineWidth: 1))
-        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
     }
 }
-
 
 #Preview {
     InsightsView(viewModel: .preview)

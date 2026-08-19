@@ -163,6 +163,8 @@ struct BankAccountDetailView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(DS.Colors.bgApp)
         .navigationTitle(account.displayName)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
