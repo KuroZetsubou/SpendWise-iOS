@@ -7,6 +7,7 @@ struct TransactionDetailView: View {
     @State private var showEdit = false
     @State private var showDeleteConfirm = false
     @State private var showLinkRecurring = false
+    @State private var heroHeight: CGFloat = 280
 
     private var bankAccount: BankAccount? {
         guard let aid = transaction.accountId else { return nil }
@@ -23,6 +24,7 @@ struct TransactionDetailView: View {
         ScrollView {
             VStack(spacing: DS.Space.sectionGap) {
                 amountHero
+                    .dsReportHeroHeight()
 
                 VStack(spacing: DS.Space.sectionGap) {
                     detailsSection
@@ -42,8 +44,9 @@ struct TransactionDetailView: View {
             .padding(.bottom, DS.Space.x8)
         }
         .scrollIndicators(.hidden)
-        .background(DS.Colors.bgApp)
+        .dsHeroScrollBackground(height: heroHeight)
         .ignoresSafeArea(edges: .top)
+        .onPreferenceChange(DSHeroHeightKey.self) { heroHeight = $0 }
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #endif
