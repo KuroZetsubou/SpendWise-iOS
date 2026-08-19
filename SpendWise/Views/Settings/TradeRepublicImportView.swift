@@ -351,6 +351,12 @@ struct TradeRepublicImportView: View {
                 importResult = ImportResult(imported: done, skipped: skipped, errors: [])
             }
 
+            // Step 5: drop generic Open Banking duplicates now covered by the richer CSV rows
+            let replaced = (try? await TransactionSyncService.reconcileTradeRepublic(userId: userId)) ?? 0
+            if replaced > 0 {
+                importResult?.errors.append("Rimosse \(replaced) transazioni Open Banking generiche, sostituite dai dati CSV.")
+            }
+
             parsedTransactions = []
             await viewModel.refreshBankSessions()
         } catch {

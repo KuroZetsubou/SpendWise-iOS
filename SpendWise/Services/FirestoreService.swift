@@ -84,6 +84,15 @@ class FirestoreService: ObservableObject {
         return Set(ids)
     }
 
+    /// One-shot fetch of all the user's transactions, decoded.
+    func fetchTransactions(userId: String) async throws -> [Transaction] {
+        let snapshot = try await db.collection("transactions")
+            .whereField("userId", isEqualTo: userId)
+            .limit(to: 10000)
+            .getDocuments()
+        return snapshot.documents.compactMap { try? $0.data(as: Transaction.self) }
+    }
+
     func updateTransaction(id: String, updates: [String: Any]) async throws {
         var sanitized = updates
         sanitized.removeValue(forKey: "id")

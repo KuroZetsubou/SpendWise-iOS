@@ -47,7 +47,13 @@ class TransactionSyncService {
             return result
         }
 
-        syncLog.info("🔄 Starting sync: \(sessions.count) sessions, \(days) days back")
+        // Trade Republic / brokerages expose bare transactions via Open Banking
+        // (only amount/date/direction). The rich data comes from the CSV import, so
+        // load those transactions once and skip/merge any generic counterpart.
+        let csvTransactions = (try? await firestoreService.fetchTransactions(userId: userId))?
+            .filter { $0.accountId == FirestoreService.manualTRDocId } ?? []
+
+        syncLog.info("🔄 Starting sync: \(sessions.count) sessions, \(days) days back, \(csvTransactions.count) TR CSV rows available for cross-reference")
         let dateFrom = dateString(daysAgo: days)
 
         for session in sessions {
@@ -149,6 +155,7 @@ class TransactionSyncService {
                         sessionToken: effectiveToken,
                         dateFrom: dateFrom,
                         accountSessionId: sessionId,
+                        csvTransactions: csvTransactions,
                         onProgress: { page, total in
                             onProgress?(SyncProgress(
                                 currentAccount: account.name,
@@ -187,6 +194,7 @@ class TransactionSyncService {
         sessionToken: String? = nil,
         dateFrom: String,
         accountSessionId: String? = nil,
+        csvTransactions: [Transaction] = [],
         maxTransactions: Int = 1000,
         onProgress: ((Int, Int) -> Void)? = nil
     ) async throws -> Int {
@@ -212,6 +220,17 @@ class TransactionSyncService {
                     userId: userId,
                     accountId: accountId
                 )
+
+                // Trade Republic: when the API only gave us a generic description but the
+                // CSV import already has the rich version, skip it — the CSV row is the source
+                // of truth and carries name/ISIN/type/category.
+                if !csvTransactions.isEmpty,
+                   Self.isGenericDescription(transaction.description),
+                   Self.findCSVMatch(for: transaction, in: csvTransactions) != nil {
+                    syncLog.info("⏭ Skipped generic TR transaction matched by CSV — CSV carries the real data (\(transaction.date), \(transaction.amount))")
+                    continue
+                }
+
                 try await firestoreService.addTransaction(transaction)
                 totalImported += 1
             }
@@ -300,7 +319,7 @@ class TransactionSyncService {
         // Transaction ID for dedup
         let bankTxId = ebTx.transaction_id
             ?? ebTx.entry_reference
-            ?? "det_\(accountId)_\(ebTx.date)_\(rawAmount)_\(String(description.prefix(20)))"
+            ?? "det_\(accountId)_\(ebTx.date)_\(rawAmount)_\(isDebit ? "D" : "C")_\(String(description.prefix(20)))"
 
         return Transaction(
             userId: userId,
@@ -321,6 +340,55 @@ class TransactionSyncService {
     }
 
     // MARK: - Helpers
+
+    /// True when the API gave us no usable description (Trade Republic returns only
+    /// amount/date/direction through Open Banking).
+    static func isGenericDescription(_ description: String) -> Bool {
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty
+            || trimmed == "Transazione"
+            || trimmed == "Transazione bancaria"
+    }
+
+    /// Matches a transaction against the Trade Republic CSV import on
+    /// (date, direction, amount). The OB amount can differ from the CSV net amount by
+    /// fees/taxes, so fall back to the closest amount within a small tolerance.
+    static func findCSVMatch(for tx: Transaction, in csvTransactions: [Transaction]) -> Transaction? {
+        let date = String(tx.date.prefix(10))
+        let candidates = csvTransactions.filter {
+            $0.type == tx.type && String($0.date.prefix(10)) == date
+        }
+        guard !candidates.isEmpty else { return nil }
+
+        let target = abs(tx.amount)
+        if let exact = candidates.first(where: { abs(abs($0.amount) - target) < 0.005 }) {
+            return exact
+        }
+        return candidates
+            .filter { abs(abs($0.amount) - target) <= 0.05 }
+            .min { abs(abs($0.amount) - target) < abs(abs($1.amount) - target) }
+    }
+
+    /// Cross-references existing Open Banking transactions with the Trade Republic CSV
+    /// import and removes the generic duplicates that now have a richer CSV counterpart.
+    /// Run after a CSV import so previously-synced bare rows are replaced by the CSV data.
+    static func reconcileTradeRepublic(userId: String) async throws -> Int {
+        let all = try await FirestoreService.shared.fetchTransactions(userId: userId)
+        let csvTxns = all.filter { $0.accountId == FirestoreService.manualTRDocId }
+        guard !csvTxns.isEmpty else { return 0 }
+
+        var removed = 0
+        for tx in all where tx.accountId != FirestoreService.manualTRDocId {
+            guard isGenericDescription(tx.description) else { continue }
+            guard let match = findCSVMatch(for: tx, in: csvTxns) else { continue }
+            if let id = tx.id {
+                try? await FirestoreService.shared.deleteTransaction(id: id)
+                syncLog.info("🧹 Replaced generic Open Banking transaction with CSV '\(match.description)' (\(tx.date), \(tx.amount))")
+                removed += 1
+            }
+        }
+        return removed
+    }
 
     private func isExpiredSessionError(_ error: EBError) -> Bool {
         if case .apiError(let code, let body) = error {

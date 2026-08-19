@@ -1,6 +1,9 @@
 import Foundation
 import FirebaseAuth
 import Combine
+import OSLog
+
+private let syncLog = Logger(subsystem: "com.kurozetsubou.spendwise", category: "DashboardSync")
 
 struct MonthlyData: Identifiable {
     var id: String { "\(month)-\(type)" }
@@ -529,6 +532,13 @@ class DashboardViewModel: ObservableObject {
             disabledAccountIds: disabledAccountIds
         ) { [weak self] progress in
             self?.syncProgress = progress
+        }
+
+        // Cross-reference with the Trade Republic CSV import: remove generic Open Banking
+        // rows that now have a richer CSV counterpart.
+        if let replaced = try? await TransactionSyncService.reconcileTradeRepublic(userId: userId),
+           replaced > 0 {
+            syncLog.info("🧹 Reconcile after sync: replaced \(replaced) generic transactions with CSV data")
         }
 
         isSyncingTransactions = false
