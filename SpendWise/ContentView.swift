@@ -33,6 +33,9 @@ struct ContentView: View {
         .tint(DS.Colors.actionPrimary)
         .animation(DS.Motion.slow, value: authViewModel.isAuthenticated)
         .animation(DS.Motion.slow, value: authViewModel.isLoading)
+#if os(iOS)
+        .modifier(URLHandlerModifier())
+#endif
     }
 
     // MARK: - Splash
