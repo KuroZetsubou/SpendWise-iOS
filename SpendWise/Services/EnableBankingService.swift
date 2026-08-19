@@ -474,10 +474,15 @@ struct EBTransaction: Codable {
     var booking_date: String?
     var value_date: String?
     var transaction_date: String?
-    var remittance_information_unstructured: String?
-    var merchant_name: String?
-    var debtor_name: String?
-    var creditor_name: String?
+    var credit_debit_indicator: String?   // "CRDT" | "DBIT" — the authoritative direction
+    var status: String?                    // "BOOK" | "PNDG" | "CNCL"
+    var creditor: EBParty?
+    var debtor: EBParty?
+    var remittance_information: [String]?
+    var merchant_category_code: String?
+    var bank_transaction_code: BankTransactionCode?
+    var note: String?
+    var reference_number: String?
     var purpose_code: String?
 
     struct TransactionAmount: Codable {
@@ -485,14 +490,36 @@ struct EBTransaction: Codable {
         var currency: String?
     }
 
+    /// The counterparty on one side of the transaction (ASPSPs return these as nested objects,
+    /// not flat `*_name` strings).
+    struct EBParty: Codable {
+        var name: String?
+        var postal_address: PostalAddress?
+
+        struct PostalAddress: Codable {
+            var town_name: String?
+            var country: String?
+        }
+    }
+
+    struct BankTransactionCode: Codable {
+        var description: String?
+        var code: String?
+        var sub_code: String?
+    }
+
     var amountDouble: Double { Double(transaction_amount?.amount ?? "0") ?? 0 }
     var currency: String { transaction_amount?.currency ?? "EUR" }
+
+    /// Best-effort description from the fields the ASPSP actually returns.
+    /// Order: remittance lines → note → bank transaction code → counterparty.
     var description: String {
-        remittance_information_unstructured
-        ?? merchant_name
-        ?? creditor_name
-        ?? debtor_name
-        ?? "Transazione"
+        let remittance = remittance_information?
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " - ")
+        let fallbacks = [remittance, note, bank_transaction_code?.description, creditor?.name, debtor?.name]
+        return fallbacks.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " - ")
     }
     var date: String { value_date ?? booking_date ?? transaction_date ?? "" }
     var id: String { transaction_id ?? entry_reference ?? UUID().uuidString }

@@ -83,11 +83,13 @@ enum TransactionNormalizer {
 
     /// Build a NormalizedTx from a raw bank transaction (EBTransaction)
     static func normalize(ebTransaction tx: EBTransaction, direction: String? = nil) -> NormalizedTx {
+        let remittance = tx.remittance_information?.joined(separator: " | ")
         let parts: [String?] = [
-            tx.remittance_information_unstructured,
-            tx.merchant_name,
-            tx.creditor_name,
-            tx.debtor_name
+            remittance,
+            tx.note,
+            tx.bank_transaction_code?.description,
+            tx.creditor?.name,
+            tx.debtor?.name
         ]
         let raw = parts.compactMap { $0 }.joined(separator: " | ")
         let canonical = normalize(raw)
@@ -99,8 +101,8 @@ enum TransactionNormalizer {
             description: raw,
             amount: abs(tx.amountDouble),
             direction: dir,
-            creditorName: tx.creditor_name,
-            debtorName: tx.debtor_name,
+            creditorName: tx.creditor?.name,
+            debtorName: tx.debtor?.name,
             creditorIban: nil,
             debtorIban: nil,
             bankCode: nil
