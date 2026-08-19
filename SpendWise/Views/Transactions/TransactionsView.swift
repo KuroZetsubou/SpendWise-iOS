@@ -1,7 +1,13 @@
 import SwiftUI
 
 struct TransactionsView: View {
+    enum TxViewMode: String, CaseIterable {
+        case list = "Lista"
+        case calendar = "Calendario"
+    }
+
     @ObservedObject var viewModel: DashboardViewModel
+    @State private var txViewMode: TxViewMode = .list
     @State private var searchText = ""
     @State private var selectedTypeFilter: Transaction.TransactionType? = nil
     @State private var selectedCategoryFilter: String? = nil
@@ -18,115 +24,42 @@ struct TransactionsView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
-                if cachedFiltered.isEmpty && searchText.isEmpty {
-                    ContentUnavailableView {
-                        Label("Nessuna transazione", systemImage: "tray")
-                    } description: {
-                        Text("Aggiungi la tua prima transazione.")
-                    } actions: {
-                        Button("Aggiungi") { showAddTransaction = true }
-                            .buttonStyle(.borderedProminent)
+            VStack(spacing: 0) {
+                header
+
+                if cachedFiltered.isEmpty {
+                    ScrollView {
+                        DSEmptyState(
+                            icon: searchText.isEmpty ? "tray" : "magnifyingglass",
+                            title: searchText.isEmpty ? "Nessuna Transazione" : "Nessun Risultato",
+                            message: searchText.isEmpty
+                                ? "Aggiungi il tuo primo movimento per iniziare a tracciare le spese."
+                                : "Prova con un altro termine di ricerca.",
+                            actionTitle: searchText.isEmpty ? "Aggiungi Movimento" : nil,
+                            action: searchText.isEmpty ? { showAddTransaction = true } : nil
+                        )
                     }
+                    .scrollIndicators(.hidden)
                 } else {
-                    List {
-                        ForEach(cachedGrouped.keys.sorted().reversed(), id: \.self) { month in
-                            Section(header: monthSectionHeader(month: month)) {
-                                ForEach(cachedGrouped[month] ?? []) { tx in
-                                    NavigationLink(value: tx) {
-                                        TransactionRowView(
-                                            transaction: tx,
-                                            onDelete: {
-                                                transactionToDelete = tx
-                                                showDeleteConfirm = true
-                                            },
-                                            onEdit: { transactionToEdit = tx }
-                                        )
-                                    }
-                                    .listRowInsets(EdgeInsets(top: 2, leading: 16, bottom: 2, trailing: 16))
-                                }
-                            }
-                        }
-                    }
-                    #if os(iOS)
-                    .listStyle(.insetGrouped)
-                    #else
-                    .listStyle(.inset)
-                    #endif
+                    transactionList
                 }
             }
+            .background(DS.Colors.bgApp)
             .navigationDestination(for: Transaction.self) { tx in
                 TransactionDetailView(transaction: tx, viewModel: viewModel)
             }
-            .navigationTitle("Transazioni")
-            .searchable(text: $searchText, prompt: "Cerca transazioni...")
             .task { updateCaches() }
             .onChange(of: viewModel.transactions) { _, _ in updateCaches() }
             .onChange(of: searchText) { _, _ in updateCaches() }
             .onChange(of: selectedTypeFilter) { _, _ in updateCaches() }
             .onChange(of: selectedCategoryFilter) { _, _ in updateCaches() }
             .overlay {
-                if isBatchCategorizing {
-                    ZStack {
-                        Color.black.opacity(0.35).ignoresSafeArea()
-                        VStack(spacing: 16) {
-                            ProgressView(value: batchProgress.total > 0 ? Double(batchProgress.done) / Double(batchProgress.total) : 0)
-                                .progressViewStyle(.linear)
-                                .frame(width: 220)
-                            Text("Categorizzazione AI…")
-                                .font(.headline)
-                                .foregroundStyle(.white)
-                            Text("\(batchProgress.done) / \(batchProgress.total)")
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.8))
-                        }
-                        .padding(24)
-                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    }
-                }
+                if isBatchCategorizing { batchOverlay }
             }
             .alert("Categorizzazione completata", isPresented: $showBatchDone) {
                 Button("OK") {}
             } message: {
                 Text("Aggiornate \(batchProgress.done) transazioni.")
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        showAddTransaction = true
-                    } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
-                    }
-                }
-                ToolbarItem(placement: .secondaryAction) {
-                    Menu {
-                        Section("Filtra per tipo") {
-                            Button("Tutte") { selectedTypeFilter = nil }
-                            Button("Entrate") { selectedTypeFilter = .income }
-                            Button("Uscite") { selectedTypeFilter = .expense }
-                        }
-                        if !cachedCategories.isEmpty {
-                            Section("Filtra per categoria") {
-                                Button("Tutte") { selectedCategoryFilter = nil }
-                                ForEach(cachedCategories, id: \.self) { cat in
-                                    Button(cat) { selectedCategoryFilter = cat }
-                                }
-                            }
-                        }
-                        Section("AI") {
-                            Button {
-                                Task { await runBatchCategorization() }
-                            } label: {
-                                let n = viewModel.transactions.filter { $0.category.isEmpty || $0.category == "Altro" }.count
-                                Label(n > 0 ? "Categorizza \(n) non categorizzate" : "Tutte già categorizzate", systemImage: "apple.intelligence")
-                            }
-                            .disabled(isBatchCategorizing || viewModel.transactions.filter { $0.category.isEmpty || $0.category == "Altro" }.isEmpty)
-                        }
-                    } label: {
-                        Image(systemName: hasActiveFilter ? "line.3.horizontal.decrease.circle.fill" : "line.3.horizontal.decrease.circle")
-                    }
-                }
             }
             .sheet(isPresented: $showAddTransaction) {
                 AddTransactionView(viewModel: viewModel)
@@ -147,17 +80,180 @@ struct TransactionsView: View {
                 Button("Annulla", role: .cancel) {}
             } message: {
                 if let tx = transactionToDelete {
-                    Text(tx.description.isEmpty ? tx.category : tx.description)
+                    Text(tx.displayTitle)
                 }
             }
-            .alert("Errore", isPresented: .init(
-                get: { viewModel.errorMessage != nil },
-                set: { if !$0 { viewModel.dismissError() } }
-            )) {
+            .alert("Errore", isPresented: errorBinding) {
                 Button("OK") { viewModel.dismissError() }
             } message: {
                 Text(viewModel.errorMessage ?? "")
             }
+        }
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.dismissError() } }
+        )
+    }
+
+    // MARK: - Header
+    //
+    // Light app bar: ink title left, a white circular overflow button on the right, then the
+    // search field and a horizontal-scroll chip row.
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            HStack(spacing: DS.Space.x3) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Movimenti").dsText(DS.Font.h2, color: DS.Colors.textHeading)
+                    Text("\(cachedFiltered.count) transazioni")
+                        .dsText(DS.Font.meta, color: DS.Colors.textMuted)
+                }
+                Spacer(minLength: DS.Space.x2)
+                filterMenu
+            }
+
+            DSTextField(placeholder: "Cerca movimenti…", text: $searchText,
+                        icon: "magnifyingglass")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: DS.Space.x2) {
+                    DSChip("Tutte", isSelected: selectedTypeFilter == nil && selectedCategoryFilter == nil) {
+                        selectedTypeFilter = nil
+                        selectedCategoryFilter = nil
+                    }
+                    DSChip("Entrate", icon: "arrow.down.left",
+                           isSelected: selectedTypeFilter == .income) {
+                        selectedTypeFilter = selectedTypeFilter == .income ? nil : .income
+                    }
+                    DSChip("Uscite", icon: "arrow.up.right",
+                           isSelected: selectedTypeFilter == .expense) {
+                        selectedTypeFilter = selectedTypeFilter == .expense ? nil : .expense
+                    }
+                    ForEach(cachedCategories, id: \.self) { cat in
+                        DSChip(cat, isSelected: selectedCategoryFilter == cat) {
+                            selectedCategoryFilter = selectedCategoryFilter == cat ? nil : cat
+                        }
+                    }
+                }
+                .padding(.horizontal, DS.Space.gutter)
+            }
+            .padding(.horizontal, -DS.Space.gutter)
+        }
+        .dsGutter()
+        .padding(.top, DS.Space.x2)
+        .padding(.bottom, DS.Space.x4)
+        .background(DS.Colors.bgApp)
+    }
+
+    private var filterMenu: some View {
+        Menu {
+            Section("Tipo") {
+                Button("Tutte") { selectedTypeFilter = nil }
+                Button("Entrate") { selectedTypeFilter = .income }
+                Button("Uscite") { selectedTypeFilter = .expense }
+            }
+            if !cachedCategories.isEmpty {
+                Section("Categoria") {
+                    Button("Tutte") { selectedCategoryFilter = nil }
+                    ForEach(cachedCategories, id: \.self) { cat in
+                        Button(cat) { selectedCategoryFilter = cat }
+                    }
+                }
+            }
+            Section("AI") {
+                Button {
+                    Task { await runBatchCategorization() }
+                } label: {
+                    Label(uncategorizedCount > 0
+                          ? "Categorizza \(uncategorizedCount) non categorizzate"
+                          : "Tutte già categorizzate",
+                          systemImage: "sparkles")
+                }
+                .disabled(isBatchCategorizing || uncategorizedCount == 0)
+            }
+        } label: {
+            Image(systemName: hasActiveFilter
+                  ? "line.3.horizontal.decrease.circle.fill"
+                  : "line.3.horizontal.decrease")
+                .font(.system(size: 19, weight: .medium))
+                .foregroundStyle(hasActiveFilter ? DS.Colors.actionPrimary : DS.Colors.textBody)
+                .frame(width: 44, height: 44)
+                .background(DS.Colors.surfaceCard)
+                .clipShape(Circle())
+                .dsShadow(.card)
+        }
+    }
+
+    private var uncategorizedCount: Int {
+        viewModel.transactions.filter { $0.category.isEmpty || $0.category == "Altro" }.count
+    }
+
+    // MARK: - List
+    //
+    // No dividers: separation is whitespace and tile fill.
+
+    private var transactionList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: DS.Space.sectionGap, pinnedViews: []) {
+                ForEach(cachedGrouped.keys.sorted().reversed(), id: \.self) { month in
+                    VStack(alignment: .leading, spacing: DS.Space.x3) {
+                        monthSectionHeader(month: month)
+
+                        LazyVStack(spacing: DS.Space.rowGap) {
+                            ForEach(cachedGrouped[month] ?? []) { tx in
+                                NavigationLink(value: tx) {
+                                    DSTransactionRow(
+                                        name: tx.displayTitle,
+                                        meta: tx.dsMetaParts,
+                                        amount: tx.amount.dsSignedAmount(isIncome: tx.type == .income),
+                                        isIncome: tx.type == .income,
+                                        dimmed: tx.isIgnored
+                                    ) {
+                                        CategoryIconView(categoryName: tx.category, size: 22,
+                                                         showBackground: false)
+                                    }
+                                }
+                                .buttonStyle(DSPressStyle())
+                                .contextMenu {
+                                    Button("Modifica", systemImage: "pencil") { transactionToEdit = tx }
+                                    Button("Elimina", systemImage: "trash", role: .destructive) {
+                                        transactionToDelete = tx
+                                        showDeleteConfirm = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .dsGutter()
+            .padding(.bottom, DS.Space.x8)
+        }
+        .scrollIndicators(.hidden)
+    }
+
+    private var batchOverlay: some View {
+        ZStack {
+            DS.Palette.navy900.opacity(0.45).ignoresSafeArea()
+            VStack(spacing: DS.Space.x4) {
+                DSProgressBar(
+                    value: batchProgress.total > 0
+                        ? Double(batchProgress.done) / Double(batchProgress.total) : 0,
+                    color: DS.Colors.actionPrimary
+                )
+                .frame(width: 220)
+
+                Text("Categorizzazione AI").dsText(DS.Font.h3, color: DS.Colors.textHeading)
+                Text("\(batchProgress.done) / \(batchProgress.total)")
+                    .dsText(DS.Font.meta, color: DS.Colors.textMuted)
+            }
+            .padding(DS.Space.x6)
+            .background(DS.Colors.surfaceCard)
+            .clipShape(RoundedRectangle(cornerRadius: DS.Radius.cardLarge, style: .continuous))
+            .dsShadow(.raised)
         }
     }
 
@@ -198,17 +294,14 @@ struct TransactionsView: View {
         let income = monthTxs.filter { $0.type == .income && !$0.isIgnored }.reduce(0) { $0 + $1.amount }
         let expense = monthTxs.filter { $0.type == .expense && !$0.isIgnored }.reduce(0) { $0 + $1.amount }
 
-        return HStack {
+        return HStack(spacing: DS.Space.x2) {
             Text(Self._fmtMonthDisplay.string(from: monthDate).capitalized)
-                .font(.subheadline.bold())
-                .foregroundStyle(.primary)
-            Spacer()
-            Text("+\(income.euroFormatted)")
-                .font(.caption.bold())
-                .foregroundStyle(Color.income)
-            Text("-\(expense.euroFormatted)")
-                .font(.caption.bold())
-                .foregroundStyle(Color.expense)
+                .dsText(DS.Font.h3, color: DS.Colors.textHeading)
+            Spacer(minLength: DS.Space.x2)
+            Text(income.dsSignedAmount(isIncome: true))
+                .dsText(DS.Font.metaBold, color: DS.Colors.income)
+            Text(expense.dsSignedAmount(isIncome: false))
+                .dsText(DS.Font.metaBold, color: DS.Colors.expense)
         }
     }
 

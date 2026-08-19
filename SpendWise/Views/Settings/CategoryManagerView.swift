@@ -113,6 +113,8 @@ struct CategoryManagerView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Categorie")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -297,6 +299,8 @@ struct AddCategoryView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Nuova Categoria")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

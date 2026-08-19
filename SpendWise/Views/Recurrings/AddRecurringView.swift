@@ -103,6 +103,8 @@ struct AddRecurringView: View {
                     Section { Text(error).foregroundStyle(.red).font(.caption) }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle(isEditing ? "Modifica Abbonamento" : "Nuovo Abbonamento")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

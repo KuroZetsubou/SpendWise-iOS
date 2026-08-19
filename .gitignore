@@ -1,0 +1,69 @@
+# ─── Xcode ────────────────────────────────────────────────────────────────────
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+*.xccheckout
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+*.xcscmblueprint
+
+# ─── Xcode Package Manager ────────────────────────────────────────────────────
+.build/
+Packages/
+*.resolved
+# Uncomment to ignore SPM resolved file (usually you DO want to commit it):
+# Package.resolved
+
+# ─── CocoaPods ────────────────────────────────────────────────────────────────
+Pods/
+Podfile.lock
+
+# ─── Carthage ─────────────────────────────────────────────────────────────────
+Carthage/Build/
+
+# ─── XcodeGen ─────────────────────────────────────────────────────────────────
+# Uncomment if you regenerate the project from project.yml and don't want to commit it:
+# *.xcodeproj/
+
+# ─── Firebase ─────────────────────────────────────────────────────────────────
+GoogleService-Info.plist
+google-services.json
+
+# ─── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# ─── Secrets / environment ────────────────────────────────────────────────────
+*.env
+.env.*
+Secrets.swift
+secrets.swift
+APIKeys.swift
+
+# ─── Editor ───────────────────────────────────────────────────────────────────
+.idea/
+*.swp
+*~
+
+# ─── Testing ──────────────────────────────────────────────────────────────────
+*.xcresult

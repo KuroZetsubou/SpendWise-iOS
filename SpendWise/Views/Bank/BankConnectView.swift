@@ -15,6 +15,7 @@ struct BankConnectView: View {
     @State private var syncDays = 30
     @State private var showTRImport = false
     @State private var showTRCountryPicker = false
+    @State private var heroHeight: CGFloat = 280
 
     // Countries where Trade Republic holds a banking licence and is reachable via Enable Banking
     private let trCountries: [(code: String, flag: String, name: String)] = [
@@ -51,210 +52,40 @@ struct BankConnectView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                // ── Patrimonio totale ───────────────────────────────
-                if !viewModel.resolvedBankAccounts.isEmpty {
-                    Section {
-                        VStack(spacing: 8) {
-                            Text("Patrimonio netto")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Text(totalNetWorth.euroFormatted)
-                                .font(.title.bold())
-                                .foregroundStyle(totalNetWorth >= 0 ? Color.income : Color.expense)
-                            Text("\(viewModel.resolvedBankAccounts.count) conti · \(viewModel.bankSessions.count) banche")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+            ScrollView {
+                VStack(spacing: DS.Space.sectionGap) {
+                    heroHeader
+                        .dsReportHeroHeight()
+
+                    VStack(spacing: DS.Space.sectionGap) {
+                        if !viewModel.bankSessions.isEmpty {
+                            connectedBanksSection
+                            syncSection
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                    }
-                }
-                
-                // ── Connected Institutions ──────────────────────────
-                if !viewModel.bankSessions.isEmpty {
-                    Section("Banche collegate") {
-                        ForEach(viewModel.bankSessions) { session in
-                            let isManual  = session.isManual == true
-                            let isExpired = !isManual && ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
-                            if isExpired {
-                                bankSessionRow(session)
-                                    .overlay(alignment: .bottomTrailing) {
-                                        Button {
-                                            Task { await reconnectSession(session) }
-                                        } label: {
-                                            Label("Riconnetti", systemImage: "arrow.clockwise.circle.fill")
-                                                .font(.caption.bold())
-                                                .padding(.horizontal, 8).padding(.vertical, 4)
-                                                .background(Color.orange)
-                                                .foregroundStyle(.white)
-                                                .clipShape(Capsule())
-                                        }
-                                        .offset(y: 4)
-                                    }
-                            } else {
-                                NavigationLink(value: session) {
-                                    bankSessionRow(session)
+                        connectBankSection
+                        tradeRepublicSection
+
+                        if let error = errorMessage {
+                            DSCard(.card, padding: DS.Space.cardPad) {
+                                HStack(spacing: DS.Space.x2) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(DS.Colors.expense)
+                                    Text(error).dsText(DS.Font.body, color: DS.Colors.expense)
                                 }
                             }
                         }
                     }
+                    .dsGutter()
                 }
-
-                // ── Sync Transactions ────────────────────────────────
-                if !viewModel.bankSessions.isEmpty {
-                    Section("Sincronizza transazioni") {
-                        HStack {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                                .foregroundStyle(Color.appPrimary)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Importa transazioni bancarie")
-                                    .font(.subheadline)
-                                Text("Scarica le transazioni dagli ultimi \(syncDays) giorni")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if viewModel.isSyncingTransactions {
-                                ProgressView()
-                            }
-                        }
-
-                        Picker("Periodo", selection: $syncDays) {
-                            Text("7 giorni").tag(7)
-                            Text("30 giorni").tag(30)
-                            Text("90 giorni").tag(90)
-                            Text("180 giorni").tag(180)
-                            Text("1 anno").tag(365)
-                        }
-                        .pickerStyle(.menu)
-
-                        Button {
-                            Task {
-                                lastSyncResult = await viewModel.syncBankTransactions(days: syncDays)
-                                showSyncResult = true
-                            }
-                        } label: {
-                            HStack {
-                                Spacer()
-                                Label("Sincronizza ora", systemImage: "arrow.down.circle.fill")
-                                    .font(.subheadline.bold())
-                                Spacer()
-                            }
-                        }
-                        .disabled(viewModel.isSyncingTransactions)
-
-                        if viewModel.isSyncingTransactions, let progress = viewModel.syncProgress {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("Conto: \(progress.currentAccount)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                HStack {
-                                    Text("Account \(progress.accountIndex + 1)/\(progress.totalAccounts)")
-                                    Spacer()
-                                    Text("\(progress.transactionsImported) importate")
-                                }
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                if progress.totalAccounts > 0 {
-                                    ProgressView(value: Double(progress.accountIndex), total: Double(progress.totalAccounts))
-                                        .tint(Color.appPrimary)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // ── Connect New Bank ────────────────────────────────
-                Section {
-                    connectBankContent
-                }
-
-                // ── Trade Republic ───────────────────────────────────
-                Section {
-                    Button {
-                        showTRCountryPicker = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.green.opacity(0.12))
-                                    .frame(width: 40, height: 40)
-                                Text("🟢")
-                                    .font(.title3)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Collega Trade Republic")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.primary)
-                                Text("Open Banking · 26 paesi EU")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    Button {
-                        showTRImport = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.green.opacity(0.12))
-                                    .frame(width: 40, height: 40)
-                                Image(systemName: "doc.text")
-                                    .font(.title3)
-                                    .foregroundStyle(.green)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Importa CSV Trade Republic")
-                                    .font(.subheadline.bold())
-                                    .foregroundStyle(.primary)
-                                Text("Importa account_transactions.csv")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } header: {
-                    Label("Trade Republic", systemImage: "chart.line.uptrend.xyaxis")
-                }
-
-                if let error = errorMessage {
-                    Section {
-                        Text(error)
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                    }
-                }
+                .padding(.bottom, DS.Space.tabBarHeight + DS.Space.x8)
             }
-            .navigationTitle("Banca")
+            .scrollIndicators(.hidden)
+            .dsHeroScrollBackground(height: heroHeight)
+            .ignoresSafeArea(edges: .top)
+            .onPreferenceChange(DSHeroHeightKey.self) { heroHeight = $0 }
             .navigationDestination(for: BankSession.self) { session in
                 BankSessionDetailView(session: session, viewModel: viewModel) {
                     Task { await reconnectSession(session) }
-                }
-            }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await syncBankAccounts() }
-                    } label: {
-                        if isConnecting {
-                            ProgressView()
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                    .disabled(isConnecting)
                 }
             }
             .sheet(isPresented: $showInstitutionPicker) {
@@ -291,8 +122,192 @@ struct BankConnectView: View {
             .onAppear {
                 Task {
                     await loadInstitutions()
-                    if let userId = viewModel.userId {
+                    if viewModel.userId != nil {
                         await viewModel.refreshBankSessions()
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Hero
+    //
+    // Navy panel carrying the net worth figure, per the kit's balance header.
+
+    private var heroHeader: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x5) {
+            HStack(spacing: DS.Space.x3) {
+                Text("Banca").dsText(DS.Font.h2, color: DS.Colors.textOnDark)
+                Spacer(minLength: DS.Space.x2)
+                DSIconButton(isConnecting ? "hourglass" : "arrow.clockwise",
+                             tone: .onDark, size: 44) {
+                    Task { await syncBankAccounts() }
+                }
+                .disabled(isConnecting)
+            }
+
+            if viewModel.resolvedBankAccounts.isEmpty {
+                VStack(alignment: .leading, spacing: DS.Space.x2) {
+                    Text("Nessun conto collegato")
+                        .dsText(DS.Font.h3, color: DS.Colors.textOnDark)
+                    Text("Collega il tuo conto bancario per tracciare le spese automaticamente e in un unico posto.")
+                        .dsText(DS.Font.body, color: DS.Colors.textOnDarkMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                DSBalanceHeader(
+                    label: "Patrimonio netto",
+                    amount: totalNetWorth.dsAmount,
+                    caption: "\(viewModel.resolvedBankAccounts.count) conti • \(viewModel.bankSessions.count) banche"
+                )
+            }
+        }
+        .padding(.horizontal, DS.Space.gutter)
+        .padding(.top, DS.Space.x16)
+        .padding(.bottom, DS.Space.x6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(DS.Gradients.hero)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 0, bottomLeadingRadius: DS.Radius.xl2,
+                bottomTrailingRadius: DS.Radius.xl2, topTrailingRadius: 0,
+                style: .continuous
+            )
+        )
+    }
+
+    // MARK: - Connected banks
+
+    private var connectedBanksSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSSectionHeader("Banche Collegate")
+
+            VStack(spacing: DS.Space.rowGap) {
+                ForEach(viewModel.bankSessions) { session in
+                    let isManual  = session.isManual == true
+                    let isExpired = !isManual && ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
+                    if isExpired {
+                        VStack(spacing: DS.Space.x3) {
+                            bankSessionRow(session)
+                            DSButton("Riconnetti", icon: "arrow.clockwise",
+                                     variant: .secondary, size: .small, block: true) {
+                                Task { await reconnectSession(session) }
+                            }
+                        }
+                        .padding(DS.Space.cardPad)
+                        .background(DS.Colors.surfaceSunken)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card, style: .continuous))
+                    } else {
+                        NavigationLink(value: session) {
+                            bankSessionRow(session)
+                                .padding(DS.Space.cardPad)
+                                .background(DS.Colors.surfaceSunken)
+                                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.card,
+                                                            style: .continuous))
+                        }
+                        .buttonStyle(DSPressStyle())
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Sync
+
+    private var syncSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSSectionHeader("Sincronizza Transazioni")
+
+            DSCard(.card) {
+                VStack(alignment: .leading, spacing: DS.Space.x4) {
+                    Text("Scarica le transazioni degli ultimi \(syncDays) giorni dai conti collegati.")
+                        .dsText(DS.Font.body, color: DS.Colors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Menu {
+                        Button("7 giorni")   { syncDays = 7 }
+                        Button("30 giorni")  { syncDays = 30 }
+                        Button("90 giorni")  { syncDays = 90 }
+                        Button("180 giorni") { syncDays = 180 }
+                        Button("1 anno")     { syncDays = 365 }
+                    } label: {
+                        HStack(spacing: DS.Space.x3) {
+                            Image(systemName: "calendar")
+                                .font(.system(size: 17, weight: .medium))
+                                .foregroundStyle(DS.Colors.textMuted)
+                            Text("Periodo").dsText(DS.Font.body, color: DS.Colors.textSecondary)
+                            Spacer(minLength: DS.Space.x2)
+                            Text(syncDays == 365 ? "1 anno" : "\(syncDays) giorni")
+                                .dsText(DS.Font.bodyMedium, color: DS.Colors.textBody)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(DS.Palette.gray400)
+                        }
+                        .padding(.horizontal, DS.Space.cardPad)
+                        .frame(height: 52)
+                        .background(DS.Colors.surfaceSunken)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.field, style: .continuous))
+                    }
+
+                    if viewModel.isSyncingTransactions, let progress = viewModel.syncProgress {
+                        VStack(alignment: .leading, spacing: DS.Space.x2) {
+                            Text(progress.currentAccount)
+                                .dsText(DS.Font.meta, color: DS.Colors.textMuted)
+                                .lineLimit(1)
+                            DSProgressBar(
+                                value: progress.totalAccounts > 0
+                                    ? Double(progress.accountIndex) / Double(progress.totalAccounts)
+                                    : 0,
+                                leftLabel: "Conto \(progress.accountIndex + 1) di \(progress.totalAccounts)",
+                                rightLabel: "\(progress.transactionsImported) importate"
+                            )
+                        }
+                    }
+
+                    DSButton(viewModel.isSyncingTransactions ? "Sincronizzazione…" : "Sincronizza Ora",
+                             icon: "arrow.down.circle",
+                             variant: .primary, size: .large, block: true) {
+                        Task {
+                            lastSyncResult = await viewModel.syncBankTransactions(days: syncDays)
+                            showSyncResult = true
+                        }
+                    }
+                    .disabled(viewModel.isSyncingTransactions)
+                }
+            }
+        }
+    }
+
+    // MARK: - Connect a new bank
+
+    private var connectBankSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSSectionHeader("Collega una Banca")
+            connectBankContent
+        }
+    }
+
+    // MARK: - Trade Republic
+
+    private var tradeRepublicSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSSectionHeader("Trade Republic")
+
+            DSCard(.card, padding: DS.Space.cardPad) {
+                VStack(spacing: 0) {
+                    DSListRow(icon: "chart.line.uptrend.xyaxis",
+                              iconTint: DS.Colors.income,
+                              iconBackground: DS.Palette.green50,
+                              label: "Collega Trade Republic",
+                              sublabel: "Open Banking • 26 paesi EU") {
+                        showTRCountryPicker = true
+                    }
+                    DSListRow(icon: "doc.text",
+                              iconTint: DS.Colors.income,
+                              iconBackground: DS.Palette.green50,
+                              label: "Importa CSV",
+                              sublabel: "Importa account_transactions.csv") {
+                        showTRImport = true
                     }
                 }
             }
@@ -314,107 +329,109 @@ struct BankConnectView: View {
         let totalBalance = accountsForSession.reduce(0) { $0 + $1.currentBalance }
         let isManual  = session.isManual == true
         let isExpired = !isManual && ["EXPIRED", "REVOKED", "UNAUTHORIZED"].contains(session.status?.uppercased() ?? "")
+        let tint: Color = isExpired ? DS.Palette.amber500 : DS.Colors.actionPrimary
 
-        return HStack(spacing: 12) {
-            Image(systemName: isManual ? "square.and.pencil" : isExpired ? "exclamationmark.triangle.fill" : "building.columns.fill")
-                .font(.title2)
-                .foregroundStyle(isManual ? Color.appPrimary : isExpired ? .orange : Color.appPrimary)
-                .frame(width: 44, height: 44)
-                .background((isExpired ? Color.orange : Color.appPrimary).opacity(0.1))
-                .clipShape(Circle())
+        return HStack(spacing: DS.Space.x3) {
+            DSIconTile(isManual ? "square.and.pencil"
+                       : isExpired ? "exclamationmark.triangle.fill" : "building.columns.fill",
+                       size: 44,
+                       background: DS.Colors.surfaceCard,
+                       foreground: tint)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: DS.Space.x1) {
                 Text(session.displayInstitutionName ?? "Banca")
-                    .font(.subheadline.bold())
-                HStack(spacing: 6) {
+                    .dsText(DS.Font.h3, color: DS.Colors.textBody)
+                    .lineLimit(1)
+
+                HStack(spacing: DS.Space.x2) {
                     Text(isManual ? "1 conto" : "\(accountsForSession.count) conti")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .dsText(DS.Font.meta, color: DS.Colors.textMuted)
+
                     if isManual {
-                        Text("Manuale")
-                            .font(.caption2.bold())
-                            .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Color.appPrimary.opacity(0.15))
-                            .foregroundStyle(Color.appPrimary)
-                            .clipShape(Capsule())
+                        DSBadge("Manuale", tone: .info)
                     } else if isExpired {
-                        Text("Scaduta — Riconnetti")
-                            .font(.caption2.bold())
-                            .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Color.orange.opacity(0.15))
-                            .foregroundStyle(Color.orange)
-                            .clipShape(Capsule())
+                        DSBadge("Scaduta", tone: .warning)
                     } else if let status = session.status {
-                        Text(status == "AUTHORIZED" ? "Attiva" : status)
-                            .font(.caption2)
-                            .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(status == "AUTHORIZED" ? Color.income.opacity(0.15) : Color.secondary.opacity(0.15))
-                            .foregroundStyle(status == "AUTHORIZED" ? Color.income : Color.secondary)
-                            .clipShape(Capsule())
+                        DSBadge(status == "AUTHORIZED" ? "Attiva" : status,
+                                tone: status == "AUTHORIZED" ? .success : .neutral)
                     }
-                }
-                if isExpired {
-                    Text("Tocca 'Riconnetti' per rinnovare l'accesso")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
             }
 
-            Spacer()
+            Spacer(minLength: DS.Space.x2)
 
             if !isExpired {
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(totalBalance.euroFormatted)
-                        .font(.subheadline.bold())
-                        .foregroundStyle(totalBalance >= 0 ? Color.income : Color.expense)
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(totalBalance.dsAmount)
+                        .dsText(DS.Font.Style(size: 16, weight: .bold, lineHeight: 22),
+                                color: totalBalance >= 0 ? DS.Colors.income : DS.Colors.expense)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                     Text(isManual ? "saldo" : "totale")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .dsText(DS.Font.meta, color: DS.Colors.textMuted)
                 }
             }
         }
-        .padding(.vertical, 4)
-        .opacity(isExpired ? 0.8 : 1.0)
+        .opacity(isExpired ? 0.85 : 1.0)
     }
 
     // MARK: - Connect Bank Content
 
     private var connectBankContent: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(Color.appPrimary)
-                Text("Collega un conto bancario")
-                    .font(.subheadline)
-            }
+        DSCard(.card) {
+            VStack(alignment: .leading, spacing: DS.Space.x4) {
+                Text("Connetti il tuo conto per un tracciamento delle spese automatico, senza inserimenti manuali.")
+                    .dsText(DS.Font.body, color: DS.Colors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            HStack {
-                Text("Paese:")
-                    .font(.caption)
-                Picker("Paese", selection: $selectedCountry) {
-                    Text("🇮🇹 Italia").tag("IT")
-                    Text("🇩🇪 Germania").tag("DE")
-                    Text("🇫🇷 Francia").tag("FR")
-                    Text("🇪🇸 Spagna").tag("ES")
-                    Text("🇳🇱 Paesi Bassi").tag("NL")
+                Menu {
+                    Button("🇮🇹 Italia")       { selectedCountry = "IT" }
+                    Button("🇩🇪 Germania")     { selectedCountry = "DE" }
+                    Button("🇫🇷 Francia")      { selectedCountry = "FR" }
+                    Button("🇪🇸 Spagna")       { selectedCountry = "ES" }
+                    Button("🇳🇱 Paesi Bassi")  { selectedCountry = "NL" }
+                } label: {
+                    HStack(spacing: DS.Space.x3) {
+                        Image(systemName: "globe")
+                            .font(.system(size: 17, weight: .medium))
+                            .foregroundStyle(DS.Colors.textMuted)
+                        Text("Paese").dsText(DS.Font.body, color: DS.Colors.textSecondary)
+                        Spacer(minLength: DS.Space.x2)
+                        Text(countryLabel(selectedCountry))
+                            .dsText(DS.Font.bodyMedium, color: DS.Colors.textBody)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(DS.Palette.gray400)
+                    }
+                    .padding(.horizontal, DS.Space.cardPad)
+                    .frame(height: 52)
+                    .background(DS.Colors.surfaceSunken)
+                    .clipShape(RoundedRectangle(cornerRadius: DS.Radius.field, style: .continuous))
                 }
-                .pickerStyle(.menu)
                 .onChange(of: selectedCountry) { _, _ in
                     Task { await loadInstitutions() }
                 }
-            }
 
-            Button {
-                showInstitutionPicker = true
-            } label: {
-                Label(
-                    isLoadingInstitutions ? "Caricamento banche..." : "Seleziona la tua banca",
-                    systemImage: "building.columns"
-                )
+                DSButton(isLoadingInstitutions ? "Caricamento Banche…" : "Seleziona la Tua Banca",
+                         icon: "building.columns",
+                         variant: .primary, size: .large, block: true) {
+                    showInstitutionPicker = true
+                }
+                .disabled(isLoadingInstitutions || isConnecting)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(isLoadingInstitutions || isConnecting)
         }
+    }
+
+    private func countryLabel(_ code: String) -> String {
+        switch code {
+        case "IT": return "🇮🇹 Italia"
+        case "DE": return "🇩🇪 Germania"
+        case "FR": return "🇫🇷 Francia"
+        case "ES": return "🇪🇸 Spagna"
+        case "NL": return "🇳🇱 Paesi Bassi"
+        default:   return code
+        }
+        
     }
 
     // MARK: - Institution Picker Sheet
@@ -469,6 +486,8 @@ struct BankConnectView: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Seleziona la tua banca")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -680,70 +699,53 @@ struct BankAccountCardView: View {
 
     private var balanceColor: Color {
         switch account.balanceStatus {
-        case .normal: return Color.income
-        case .warning: return Color(hex: "#F59E0B")
-        case .danger: return Color.expense
+        case .normal:  return DS.Colors.income
+        case .warning: return DS.Palette.amber500
+        case .danger:  return DS.Colors.expense
         }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: iconForAccountType(account.cashAccountType ?? account.type))
-                    .font(.title2)
-                    .foregroundStyle(Color.appPrimary)
-                    .frame(width: 44, height: 44)
-                    .background(Color.appPrimary.opacity(0.1))
-                    .clipShape(Circle())
+        DSCard(account.isExcluded ? .outline : .card) {
+            VStack(spacing: DS.Space.x4) {
+                HStack(spacing: DS.Space.x3) {
+                    DSIconTile(iconForAccountType(account.cashAccountType ?? account.type),
+                               size: 44)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(account.displayName)
-                        .font(.subheadline.bold())
-                    if let inst = account.institutionName {
-                        Text(inst)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(account.displayName)
+                            .dsText(DS.Font.h3, color: DS.Colors.textBody)
+                            .lineLimit(1)
+                        if let inst = account.institutionName {
+                            Text(inst).dsText(DS.Font.meta, color: DS.Colors.textMuted).lineLimit(1)
+                        }
+                    }
+
+                    Spacer(minLength: DS.Space.x2)
+
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(account.currentBalance.currencyFormatted(code: account.displayCurrency))
+                            .dsText(DS.Font.Style(size: 16, weight: .bold, lineHeight: 22),
+                                    color: balanceColor)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Text(account.accountTypeLabel)
+                            .dsText(DS.Font.meta, color: DS.Colors.textMuted)
                     }
                 }
 
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(account.currentBalance.currencyFormatted(code: account.displayCurrency))
-                        .font(.subheadline.bold())
-                        .foregroundStyle(balanceColor)
-                    Text(account.accountTypeLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if account.isCreditCard == true, let limit = account.creditLimit {
+                    let used = limit - account.currentBalance
+                    let ratio = min(max(used / limit, 0), 1)
+                    DSProgressBar(
+                        value: ratio,
+                        color: ratio > 0.8 ? DS.Colors.expense : DS.Colors.actionPrimary,
+                        leftLabel: "Usato \(used.dsAmount)",
+                        rightLabel: "Limite \(limit.dsAmount)"
+                    )
                 }
-            }
-            .padding()
-
-            if account.isCreditCard == true, let limit = account.creditLimit {
-                let used = limit - account.currentBalance
-                let ratio = min(max(used / limit, 0), 1)
-                VStack(spacing: 4) {
-                    ProgressView(value: ratio)
-                        .tint(ratio > 0.8 ? Color.expense : Color.appPrimary)
-                    HStack {
-                        Text("Usato: \(used.euroFormatted)")
-                        Spacer()
-                        Text("Limite: \(limit.euroFormatted)")
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                }
-                .padding([.horizontal, .bottom])
             }
         }
-        .background(.background)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .shadow(color: .black.opacity(0.08), radius: 6, x: 0, y: 2)
-        .overlay(
-            account.isExcluded
-            ? RoundedRectangle(cornerRadius: 12).strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1)
-            : nil
-        )
         .opacity(account.isExcluded ? 0.6 : 1.0)
     }
 

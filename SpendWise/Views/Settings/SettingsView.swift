@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var viewModel: DashboardViewModel
     @EnvironmentObject var authViewModel: AuthViewModel
+    @Environment(\.dismiss) private var dismiss
 
     @AppStorage(Constants.UserDefaultsKeys.ebAppId) private var ebAppId = ""
     @AppStorage(Constants.UserDefaultsKeys.ebAppSecret) private var ebAppSecret = ""
@@ -15,19 +16,31 @@ struct SettingsView: View {
     @State private var alertMessage: String?
     @State private var showAlert = false
     @State private var showAnonLogoutConfirm = false
+    @State private var heroHeight: CGFloat = 320
 
     var body: some View {
         NavigationStack {
-            Form {
-                profileSection
-                aiSettingsSection
-                bankAPISection
-                categoriesSection
-                importSection
-                dataManagementSection
-                aboutSection
+            ScrollView {
+                VStack(spacing: DS.Space.sectionGap) {
+                    profileHeader
+                        .dsReportHeroHeight()
+
+                    VStack(spacing: DS.Space.sectionGap) {
+                        if authViewModel.isAnonymous { linkAccountBanner }
+                        aiSection
+                        bankSection
+                        dataSection
+                        dangerSection
+                        aboutSection
+                    }
+                    .dsGutter()
+                }
+                .padding(.bottom, DS.Space.tabBarHeight + DS.Space.x8)
             }
-            .navigationTitle("Impostazioni")
+            .scrollIndicators(.hidden)
+            .dsHeroScrollBackground(height: heroHeight)
+            .ignoresSafeArea(edges: .top)
+            .onPreferenceChange(DSHeroHeightKey.self) { heroHeight = $0 }
             .sheet(isPresented: $showCategoryManager) {
                 CategoryManagerView(viewModel: viewModel)
             }
@@ -76,211 +89,199 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - Profile header
+    //
+    // Navy panel bleeding to the edges, avatar and identity centred under the app bar.
+
+    private var profileHeader: some View {
+        VStack(spacing: DS.Space.x4) {
+            HStack {
+                DSIconButton("xmark", tone: .onDark, size: 40) { dismiss() }
+                Spacer()
+                Text("Impostazioni").dsText(DS.Font.h3, color: DS.Colors.textOnDark)
+                Spacer()
+                Color.clear.frame(width: 40, height: 40)
+            }
+
+            avatar
+
+            VStack(spacing: 2) {
+                Text(authViewModel.userDisplayName)
+                    .dsText(DS.Font.h3, color: DS.Colors.textOnDark)
+                Text(authViewModel.userEmail)
+                    .dsText(DS.Font.meta, color: DS.Colors.textOnDarkMuted)
+            }
+
+            if authViewModel.isAnonymous {
+                DSBadge("Account anonimo", icon: "person.fill.questionmark", tone: .onDark)
+            }
+        }
+        .padding(.horizontal, DS.Space.gutter)
+        .padding(.top, DS.Space.x16)
+        .padding(.bottom, DS.Space.x6)
+        .frame(maxWidth: .infinity)
+        .background(DS.Gradients.hero)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 0, bottomLeadingRadius: DS.Radius.xl2,
+                bottomTrailingRadius: DS.Radius.xl2, topTrailingRadius: 0,
+                style: .continuous
+            )
+        )
+    }
+
+    @ViewBuilder
+    private var avatar: some View {
+        if let photoURL = authViewModel.userPhotoURL {
+            AsyncImage(url: photoURL) { img in
+                img.resizable().scaledToFill()
+            } placeholder: {
+                Circle().fill(DS.Colors.scrimOnDark)
+            }
+            .frame(width: 72, height: 72)
+            .clipShape(Circle())
+            .overlay(Circle().strokeBorder(DS.Colors.scrimOnDark, lineWidth: 2))
+        } else {
+            Image(systemName: authViewModel.isAnonymous ? "person.fill.questionmark" : "person.fill")
+                .font(.system(size: 30, weight: .medium))
+                .foregroundStyle(DS.Colors.textOnDark)
+                .frame(width: 72, height: 72)
+                .background(DS.Colors.scrimOnDark)
+                .clipShape(Circle())
+        }
+    }
+
     // MARK: - Sections
 
-    private var profileSection: some View {
-        Section("Profilo") {
-            HStack(spacing: 12) {
-                if let photoURL = authViewModel.userPhotoURL {
-                    AsyncImage(url: photoURL) { img in
-                        img.resizable().scaledToFill()
-                    } placeholder: {
-                        Image(systemName: "person.circle.fill")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(width: 50, height: 50)
-                    .clipShape(Circle())
-                } else {
-                    Image(systemName: authViewModel.isAnonymous ? "person.fill.questionmark" : "person.circle.fill")
-                        .font(.system(size: 50))
-                        .foregroundStyle(.secondary)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(authViewModel.userDisplayName)
-                        .font(.headline)
-                    Text(authViewModel.userEmail)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .padding(.vertical, 4)
+    private var linkAccountBanner: some View {
+        DSPromoBanner(
+            title: "Collega il Tuo Account",
+            message: "Collega un account Google per sincronizzare i dati su tutti i dispositivi e non perderli.",
+            icon: "link",
+            actionTitle: "Collega Google",
+            action: { Task { await authViewModel.linkWithGoogle() } }
+        )
+    }
 
-            // Link Google account banner (only for anonymous users)
-            if authViewModel.isAnonymous {
-                Button {
-                    Task { await authViewModel.linkWithGoogle() }
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "link.circle.fill")
-                            .foregroundStyle(Color.appPrimary)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Collega account Google")
-                                .font(.subheadline.bold())
-                            Text("Sincronizza i dati su tutti i dispositivi")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+    private var aiSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x3) {
+            DSSectionHeader("Intelligenza Artificiale")
+            DSCard(.card, padding: DS.Space.cardPad) {
+                DSListRow(
+                    icon: "brain.head.profile",
+                    label: "Apple Intelligence",
+                    sublabel: appleIntelligenceStatus,
+                    showChevron: false
+                ) {
+                    if #available(iOS 26.0, macOS 26.0, *) {
+                        DSBadge("Attiva", icon: "checkmark", tone: .success)
+                    } else {
+                        DSBadge("Non disponibile", tone: .neutral)
                     }
                 }
-                .foregroundStyle(.primary)
+            }
+        }
+    }
+
+    private var appleIntelligenceStatus: String {
+        if #available(iOS 26.0, macOS 26.0, *) {
+            return "Disponibile su questo dispositivo"
+        }
+        return "Richiede iOS 26+ con Apple Intelligence"
+    }
+
+    private var bankSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x3) {
+            DSSectionHeader("Open Banking")
+            DSCard(.card, padding: DS.Space.cardPad) {
+                VStack(spacing: 0) {
+                    NavigationLink {
+                        EnableBankingSettingsView(viewModel: viewModel)
+                    } label: {
+                        DSListRow(
+                            icon: "building.columns.fill",
+                            label: "Connessione bancaria",
+                            sublabel: ebAppId.isEmpty
+                                ? "Non configurato"
+                                : "App ID: \(ebAppId.prefix(8))…"
+                        )
+                    }
+                    .buttonStyle(DSPressStyle())
+                }
+            }
+        }
+    }
+
+    private var dataSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x3) {
+            DSSectionHeader("Dati")
+            DSCard(.card, padding: DS.Space.cardPad) {
+                VStack(spacing: 0) {
+                    DSListRow(icon: "tag", label: "Gestisci categorie") {
+                        showCategoryManager = true
+                    }
+                    DSListRow(icon: "arrow.down.doc",
+                              label: "Importa da Bilance",
+                              sublabel: "Importa transazioni via CSV") {
+                        showBilanceImport = true
+                    }
+                }
+            }
+        }
+    }
+
+    private var dangerSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x3) {
+            DSSectionHeader("Gestione Dati")
+            DSCard(.card, padding: DS.Space.cardPad) {
+                VStack(spacing: 0) {
+                    DSListRow(icon: "arrow.down.circle.badge.xmark",
+                              iconTint: DS.Palette.amber500,
+                              iconBackground: DS.Palette.amber500.opacity(0.12),
+                              label: "Elimina transazioni importate") {
+                        showDeleteImportedConfirm = true
+                    }
+                    DSListRow(icon: "trash",
+                              iconTint: DS.Colors.expense,
+                              iconBackground: DS.Palette.red50,
+                              label: "Reset completo dati") {
+                        showResetConfirm = true
+                    }
+                    .disabled(isResetting)
+                }
             }
 
-            Button(role: .destructive) {
+            DSButton(authViewModel.isAnonymous ? "Esci e Cancella Dati" : "Logout",
+                     icon: "rectangle.portrait.and.arrow.right",
+                     variant: .secondary,
+                     size: .large,
+                     block: true) {
                 if authViewModel.isAnonymous {
                     showAnonLogoutConfirm = true
                 } else {
                     authViewModel.signOut()
                 }
-            } label: {
-                Label(
-                    authViewModel.isAnonymous ? "Esci (i dati locali andranno persi)" : "Logout",
-                    systemImage: "rectangle.portrait.and.arrow.right"
-                )
             }
-        }
-    }
-
-    private var aiSettingsSection: some View {
-        Section("Intelligenza Artificiale") {
-            HStack(spacing: 12) {
-                Image(systemName: "brain.head.profile")
-                    .font(.title2)
-                    .foregroundStyle(Color.appPrimary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Apple Intelligence")
-                        .font(.subheadline.bold())
-                    if #available(iOS 26.0, macOS 26.0, *) {
-                        Label("Disponibile su questo dispositivo", systemImage: "checkmark.circle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.green)
-                    } else {
-                        Text("Richiede iOS 26+ con Apple Intelligence abilitato")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-
-            if #unavailable(iOS 26.0, macOS 26.0) {
-                Link(destination: URL(string: "https://support.apple.com/apple-intelligence")!) {
-                    Label("Scopri Apple Intelligence", systemImage: "arrow.up.right.square")
-                        .font(.caption)
-                }
-            }
-        }
-    }
-
-    private var bankAPISection: some View {
-        Section {
-            NavigationLink {
-                EnableBankingSettingsView(viewModel: viewModel)
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "building.columns.fill")
-                        .foregroundStyle(Color.appPrimary)
-                        .frame(width: 28)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Open Banking")
-                            .font(.subheadline)
-                        Text(ebAppId.isEmpty ? "Non configurato" : "App ID: \(ebAppId.prefix(8))…")
-                            .font(.caption)
-                            .foregroundStyle(ebAppId.isEmpty ? Color.expense : .secondary)
-                    }
-                }
-            }
-        } header: {
-            Text("Open Banking")
-        } footer: {
-            Text("Connetti i conti bancari via Enable Banking API.")
-                .font(.caption2)
-        }
-    }
-
-    private var categoriesSection: some View {
-        Section("Categorie") {
-            Button {
-                showCategoryManager = true
-            } label: {
-                Label("Gestisci categorie", systemImage: "tag")
-            }
-        }
-    }
-
-    private var importSection: some View {
-        Section("Importa dati") {
-            Button {
-                showBilanceImport = true
-            } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "arrow.down.doc.fill")
-                        .foregroundStyle(Color.appPrimary)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Importa da Bilance")
-                            .font(.subheadline)
-                        Text("Importa transazioni via CSV")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .foregroundStyle(.primary)
-        }
-    }
-
-    private var dataManagementSection: some View {
-        Section("Gestione Dati") {
-            Button {
-                showDeleteImportedConfirm = true
-            } label: {
-                Label("Elimina transazioni importate", systemImage: "arrow.down.circle.badge.xmark")
-                    .foregroundStyle(.orange)
-            }
-
-            Button(role: .destructive) {
-                showResetConfirm = true
-            } label: {
-                Label("Reset completo dati", systemImage: "trash")
-            }
-            .disabled(isResetting)
+            .padding(.top, DS.Space.x1)
         }
     }
 
     private var aboutSection: some View {
-        Section("Info") {
-            HStack {
-                Text("Versione")
-                Spacer()
-                Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
-                    .foregroundStyle(.secondary)
-            }
-            HStack {
-                Text("SpendWise")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text("Gestione finanze personali")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        VStack(spacing: DS.Space.x1) {
+            Text("SpendWise")
+                .dsText(DS.Font.labelBold, color: DS.Colors.textSecondary)
+            Text("Versione \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0") • Gestione finanze personali")
+                .dsText(DS.Font.meta, color: DS.Colors.textMuted)
         }
+        .frame(maxWidth: .infinity)
+        .padding(.top, DS.Space.x4)
     }
 
     // MARK: - Actions
 
     private func performReset() async {
         isResetting = true
-        do {
-            await viewModel.resetAllData()
-        }
+        await viewModel.resetAllData()
         isResetting = false
     }
 
@@ -295,7 +296,7 @@ struct SettingsView: View {
     }
 }
 
-
 #Preview {
     SettingsView(viewModel: .preview)
+        .environmentObject(AuthViewModel())
 }

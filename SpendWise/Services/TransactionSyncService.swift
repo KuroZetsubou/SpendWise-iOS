@@ -233,26 +233,54 @@ class TransactionSyncService {
     ) async throws -> Transaction {
         let rawAmount = ebTx.amountDouble
         let currency = ebTx.currency
-        let isDebit = rawAmount < 0
+        // Trade Republic (and some other ASPSPs) report unsigned amounts with the
+        // direction in credit_debit_indicator — trust it over the amount sign.
+        let isDebit: Bool
+        if let indicator = ebTx.credit_debit_indicator {
+            isDebit = indicator.uppercased() == "DBIT"
+        } else {
+            isDebit = rawAmount < 0
+        }
         let txType: Transaction.TransactionType = isDebit ? .expense : .income
         let absAmount = abs(rawAmount)
 
-        // Build description from available fields
-        var description = ebTx.remittance_information_unstructured ?? ""
+        // Build description from the fields the API actually returns.
+        // Remittance lines first (carries the counterparty/security info for TR),
+        // then counterparty, note and the bank transaction code as fallbacks.
         let counterParty = isDebit
-            ? ebTx.creditor_name
-            : ebTx.debtor_name
-        if let cp = counterParty, !cp.isEmpty {
-            description = description.isEmpty ? cp : "\(cp) - \(description)"
+            ? ebTx.creditor?.name
+            : ebTx.debtor?.name
+
+        var descriptionParts: [String] = []
+        if let remittance = ebTx.remittance_information {
+            let lines = remittance
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            if !lines.isEmpty { descriptionParts.append(lines.joined(separator: " - ")) }
         }
-        if let merchant = ebTx.merchant_name, !merchant.isEmpty, !description.contains(merchant) {
-            description = description.isEmpty ? merchant : "\(merchant) - \(description)"
+        if let cp = counterParty?.trimmingCharacters(in: .whitespacesAndNewlines), !cp.isEmpty {
+            descriptionParts.append(cp)
         }
-        if description.isEmpty { description = "Transazione bancaria" }
+        if let note = ebTx.note?.trimmingCharacters(in: .whitespacesAndNewlines), !note.isEmpty {
+            descriptionParts.append(note)
+        }
+        if let codeDesc = ebTx.bank_transaction_code?.description?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !codeDesc.isEmpty {
+            descriptionParts.append(codeDesc)
+        }
+        let description = descriptionParts.isEmpty ? "Transazione bancaria" : descriptionParts.joined(separator: " - ")
 
         // Giroconto detection
         let girocontoKeywords = ["giroconto", "girofondo", "storno", "trasferimento", "bonifico interno"]
         let isGiroconto = girocontoKeywords.contains(where: { description.lowercased().contains($0) })
+
+        // Investment detection — Trade Republic and other brokerages expose securities
+        // orders/dividends through Open Banking with their own wording.
+        let investmentKeywords = [
+            "kauf", "verkauf", "sparplan", "savings plan", "dividend", "zins",
+            "stock perk", "wertpapier", "order", "security", "acquisto", "vendita", "dividendo"
+        ]
+        let isInvestment = !isGiroconto && investmentKeywords.contains(where: { description.lowercased().contains($0) })
 
         // Currency conversion
         var finalAmount = absAmount
@@ -278,7 +306,7 @@ class TransactionSyncService {
             userId: userId,
             amount: finalAmount,
             type: txType,
-            category: isGiroconto ? "Giroconto" : "Altro",
+            category: isGiroconto ? "Giroconto" : (isInvestment ? "Investimenti" : "Altro"),
             description: description,
             date: ebTx.date,
             bookingDate: ebTx.booking_date,

@@ -17,12 +17,14 @@ enum Constants {
         static let defaultLocale = "it_IT"
     }
 
+    /// Hex values mirroring the FinanceMode design system tokens. Prefer `DS.Colors.*`
+    /// in new code; these stay for the string-based category/impact color plumbing.
     enum Colors {
-        static let income = "#22C55E"
-        static let expense = "#EF4444"
-        static let neutral = "#6B7280"
-        static let primary = "#3B82F6"
-        static let secondary = "#8B5CF6"
+        static let income = "#2FC81E"    // --green-500
+        static let expense = "#C10D14"   // --red-500
+        static let neutral = "#7A828C"   // --gray-500
+        static let primary = "#3856FC"   // --blue-500
+        static let secondary = "#8B5CF6" // --purple-500
     }
 
     enum Animation {

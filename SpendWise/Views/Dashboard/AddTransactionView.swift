@@ -39,162 +39,34 @@ struct AddTransactionView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                // Type Picker
-                Section {
-                    Picker("Tipo", selection: $selectedType) {
-                        ForEach(Transaction.TransactionType.allCases, id: \.self) { type in
-                            Text(type == .income ? "Entrata" : "Uscita").tag(type)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: selectedType) { _, _ in
-                        selectedCategory = availableParentCategories.first?.name ?? ""
-                        selectedSubCategory = ""
-                    }
-                }
+            ZStack(alignment: .bottom) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: DS.Space.sectionGap) {
+                        typeSelector
+                        amountAndDate
+                        descriptionSection
+                        categorySection
+                        optionsSection
 
-                // Amount + Date
-                Section("Importo e Data") {
-                    HStack {
-                        Text("€")
-                            .foregroundStyle(.secondary)
-                        TextField("0,00", text: $amountString)
-                            #if os(iOS)
-                            .keyboardType(.decimalPad)
-                            #endif
-                    }
-                    DatePicker("Data", selection: $selectedDate, displayedComponents: .date)
-                        .environment(\.locale, Locale(identifier: "it_IT"))
-                }
-
-                // Description + AI suggestion
-                Section("Descrizione") {
-                    TextField("Descrizione transazione", text: $description)
-                        .onChange(of: description) { _, newValue in
-                            categorySuggestion = nil
-                            // Auto-suggest after 0.6s debounce
-                            if newValue.count >= 3 {
-                                Task {
-                                    try? await Task.sleep(for: .milliseconds(600))
-                                    guard description == newValue else { return }
-                                    await suggestCategory()
+                        if let error = errorMessage {
+                            DSCard(.card, padding: DS.Space.cardPad) {
+                                HStack(spacing: DS.Space.x2) {
+                                    Image(systemName: "exclamationmark.triangle.fill")
+                                        .foregroundStyle(DS.Colors.expense)
+                                    Text(error).dsText(DS.Font.body, color: DS.Colors.expense)
                                 }
                             }
                         }
-
-                    if isSuggestingCategory {
-                        HStack(spacing: 6) {
-                            ProgressView().scaleEffect(0.7)
-                            Text("Analisi AI in corso…")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    } else if let suggestion = categorySuggestion {
-                        HStack(spacing: 8) {
-                            Image(systemName: sourceIcon(suggestionSource))
-                                .foregroundStyle(.primary)
-                                .font(.caption)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text("Suggerimento: **\(suggestion)**")
-                                    .font(.caption)
-                                Text("\(sourceLabel(suggestionSource)) · \(Int(suggestionConfidence * 100))% confidenza")
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                            Spacer()
-                            if suggestion != selectedCategory {
-                                Button("Usa") {
-                                    withAnimation { selectedCategory = suggestion }
-                                }
-                                .font(.caption.bold())
-                                .buttonStyle(.borderedProminent)
-                                .controlSize(.mini)
-                            } else {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundStyle(Color.income)
-                                    .font(.caption)
-                            }
-                        }
-                        .padding(.vertical, 2)
                     }
+                    .dsGutter()
+                    .padding(.top, DS.Space.x4)
+                    .padding(.bottom, 110)
                 }
+                .scrollIndicators(.hidden)
 
-                // Category
-                Section("Categoria") {
-                    if availableParentCategories.isEmpty {
-                        Text("Nessuna categoria disponibile")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Picker("Categoria", selection: $selectedCategory) {
-                            ForEach(availableParentCategories) { cat in
-                                HStack {
-                                    CategoryIconView(categoryName: cat.name, size: 20, showBackground: false)
-                                    Text(cat.name)
-                                }
-                                .tag(cat.name)
-                            }
-                        }
-
-                        if !availableSubCategories.isEmpty {
-                            Picker("Sotto-categoria", selection: $selectedSubCategory) {
-                                Text("Nessuna").tag("")
-                                ForEach(availableSubCategories) { sub in
-                                    Text(sub.name).tag(sub.name)
-                                }
-                            }
-                        }
-
-                        // AI categorize button
-                        Button {
-                            Task { await suggestCategory() }
-                        } label: {
-                            HStack(spacing: 6) {
-                                if isSuggestingCategory {
-                                    ProgressView().scaleEffect(0.75)
-                                    Text("Analisi in corso…")
-                                } else {
-                                    Image(systemName: "apple.intelligence")
-                                    Text("Categorizza con AI")
-                                }
-                            }
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(description.trimmingCharacters(in: .whitespaces).isEmpty ? .secondary : .primary)
-                        }
-                        .disabled(description.trimmingCharacters(in: .whitespaces).isEmpty || isSuggestingCategory)
-                    }
-                }
-
-                // Tags
-                Section("Tag (opzionale)") {
-                    TextField("es. vacanze, lavoro", text: $tags)
-                }
-
-                // Recurring
-                Section("Ricorrente") {
-                    Toggle("Transazione ricorrente", isOn: $isRecurring)
-                    if isRecurring {
-                        Picker("Frequenza", selection: $recurringFrequency) {
-                            Text("Settimanale").tag(Transaction.RecurringFrequency.weekly)
-                            Text("Mensile").tag(Transaction.RecurringFrequency.monthly)
-                            Text("Annuale").tag(Transaction.RecurringFrequency.yearly)
-                        }
-                    }
-                }
-
-                // Ignore
-                Section("Opzioni") {
-                    Toggle("Ignora nelle statistiche", isOn: $isIgnored)
-                }
-
-                if let error = errorMessage {
-                    Section {
-                        Text(error)
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                    }
-                }
+                saveBar
             }
+            .background(DS.Colors.bgApp)
             .navigationTitle(isEditing ? "Modifica Transazione" : "Nuova Transazione")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -202,17 +74,214 @@ struct AddTransactionView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Annulla") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(isEditing ? "Salva" : "Aggiungi") {
-                        Task { await saveTransaction() }
-                    }
-                    .disabled(isLoading)
-                    .bold()
+                        .foregroundStyle(DS.Colors.textSecondary)
                 }
             }
             .onAppear { populateIfEditing() }
         }
+    }
+
+    // MARK: - Type
+
+    private var typeSelector: some View {
+        DSSegmentedTabs(
+            options: [(Transaction.TransactionType.expense, "Uscita"),
+                      (Transaction.TransactionType.income, "Entrata")],
+            selection: $selectedType
+        )
+        .onChange(of: selectedType) { _, _ in
+            selectedCategory = availableParentCategories.first?.name ?? ""
+            selectedSubCategory = ""
+        }
+    }
+
+    // MARK: - Amount and date
+
+    private var amountAndDate: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x4) {
+            DSAmountInput(text: $amountString)
+
+            VStack(alignment: .leading, spacing: DS.Space.x2) {
+                Text("Data").dsText(DS.Font.labelBold, color: DS.Colors.textSecondary)
+                HStack {
+                    Image(systemName: "calendar")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(DS.Colors.textMuted)
+                    DatePicker("", selection: $selectedDate, displayedComponents: .date)
+                        .labelsHidden()
+                        .environment(\.locale, Locale(identifier: "it_IT"))
+                    Spacer()
+                }
+                .padding(.horizontal, DS.Space.cardPad)
+                .frame(height: 52)
+                .background(DS.Colors.surfaceSunken)
+                .clipShape(RoundedRectangle(cornerRadius: DS.Radius.field, style: .continuous))
+            }
+        }
+    }
+
+    // MARK: - Description and AI suggestion
+
+    private var descriptionSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x3) {
+            DSTextField("Descrizione", placeholder: "es. Supermercato Esselunga",
+                        text: $description, icon: "text.alignleft")
+                .onChange(of: description) { _, newValue in
+                    categorySuggestion = nil
+                    // Auto-suggest after 0.6s debounce
+                    if newValue.count >= 3 {
+                        Task {
+                            try? await Task.sleep(for: .milliseconds(600))
+                            guard description == newValue else { return }
+                            await suggestCategory()
+                        }
+                    }
+                }
+
+            if isSuggestingCategory {
+                HStack(spacing: DS.Space.x2) {
+                    ProgressView().scaleEffect(0.7).tint(DS.Colors.actionPrimary)
+                    Text("Analisi AI in corso…").dsText(DS.Font.meta, color: DS.Colors.textMuted)
+                }
+            } else if let suggestion = categorySuggestion {
+                DSCard(.tint, padding: DS.Space.cardPad) {
+                    HStack(spacing: DS.Space.x3) {
+                        DSIconTile(sourceIcon(suggestionSource), size: 36,
+                                   background: DS.Colors.actionPrimary,
+                                   foreground: DS.Colors.textOnDark)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(suggestion).dsText(DS.Font.bodyMedium, color: DS.Colors.textBody)
+                            Text("\(sourceLabel(suggestionSource)) • \(Int(suggestionConfidence * 100))% confidenza")
+                                .dsText(DS.Font.meta, color: DS.Colors.textSecondary)
+                        }
+                        Spacer(minLength: DS.Space.x2)
+                        if suggestion != selectedCategory {
+                            DSButton("Usa", variant: .primary, size: .small) {
+                                withAnimation(DS.Motion.standard) { selectedCategory = suggestion }
+                            }
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundStyle(DS.Colors.income)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Category
+    //
+    // Horizontal scroll row of category chips, per the kit's category selector.
+
+    private var categorySection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x3) {
+            HStack {
+                Text("Categoria").dsText(DS.Font.labelBold, color: DS.Colors.textSecondary)
+                Spacer()
+                Button {
+                    Task { await suggestCategory() }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "sparkles").font(.system(size: 12, weight: .semibold))
+                        Text("Categorizza con AI").dsText(DS.Font.metaBold, color: DS.Colors.textLink)
+                    }
+                    .foregroundStyle(DS.Colors.textLink)
+                }
+                .buttonStyle(DSPressStyle())
+                .disabled(description.trimmingCharacters(in: .whitespaces).isEmpty || isSuggestingCategory)
+                .opacity(description.trimmingCharacters(in: .whitespaces).isEmpty ? 0.45 : 1)
+            }
+
+            if availableParentCategories.isEmpty {
+                Text("Nessuna categoria disponibile")
+                    .dsText(DS.Font.body, color: DS.Colors.textMuted)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: DS.Space.x2) {
+                        ForEach(availableParentCategories) { cat in
+                            DSChip(cat.name,
+                                   icon: AppCategory.categoryIcons[cat.name],
+                                   isSelected: selectedCategory == cat.name) {
+                                selectedCategory = cat.name
+                                selectedSubCategory = ""
+                            }
+                        }
+                    }
+                    .padding(.horizontal, DS.Space.gutter)
+                }
+                .padding(.horizontal, -DS.Space.gutter)
+
+                if !availableSubCategories.isEmpty {
+                    Menu {
+                        Button("Nessuna") { selectedSubCategory = "" }
+                        ForEach(availableSubCategories) { sub in
+                            Button(sub.name) { selectedSubCategory = sub.name }
+                        }
+                    } label: {
+                        HStack(spacing: DS.Space.x3) {
+                            Text("Sotto-categoria").dsText(DS.Font.body, color: DS.Colors.textSecondary)
+                            Spacer(minLength: DS.Space.x2)
+                            Text(selectedSubCategory.isEmpty ? "Nessuna" : selectedSubCategory)
+                                .dsText(DS.Font.bodyMedium, color: DS.Colors.textBody)
+                                .lineLimit(1)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(DS.Palette.gray400)
+                        }
+                        .padding(.horizontal, DS.Space.cardPad)
+                        .frame(height: 52)
+                        .background(DS.Colors.surfaceSunken)
+                        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.field, style: .continuous))
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Options
+
+    private var optionsSection: some View {
+        VStack(alignment: .leading, spacing: DS.Space.x3) {
+            DSTextField("Tag (opzionale)", placeholder: "es. vacanze, lavoro",
+                        text: $tags, icon: "number")
+
+            DSCard(.card, padding: DS.Space.cardPad) {
+                VStack(spacing: 0) {
+                    DSSwitchRow(icon: "repeat", label: "Transazione ricorrente", isOn: $isRecurring)
+
+                    if isRecurring {
+                        DSSegmentedTabs(
+                            options: [(Transaction.RecurringFrequency.weekly, "Settimanale"),
+                                      (Transaction.RecurringFrequency.monthly, "Mensile"),
+                                      (Transaction.RecurringFrequency.yearly, "Annuale")],
+                            selection: $recurringFrequency
+                        )
+                        .padding(.top, DS.Space.x2)
+                        .padding(.bottom, DS.Space.x2)
+                    }
+
+                    DSSwitchRow(icon: "eye.slash", label: "Ignora nelle statistiche",
+                                isOn: $isIgnored)
+                }
+            }
+        }
+    }
+
+    // MARK: - Save bar
+    //
+    // Screen CTAs are pinned to the bottom over a white protection fade.
+
+    private var saveBar: some View {
+        DSButton(isEditing ? "Salva Modifiche" : "Aggiungi Movimento",
+                 variant: .primary, size: .large, block: true) {
+            Task { await saveTransaction() }
+        }
+        .disabled(isLoading)
+        .dsGutter()
+        .padding(.bottom, DS.Space.x5)
+        .padding(.top, DS.Space.x8)
+        .background(DS.Gradients.fadeWhite)
     }
 
     // MARK: - Populate

@@ -83,7 +83,12 @@ struct RecurringsView: View {
                     RecurringCalendarView(viewModel: viewModel)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Abbonamenti")
+            .navigationDestination(for: Transaction.self) { tx in
+                TransactionDetailView(transaction: tx, viewModel: viewModel)
+            }
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Picker("Vista", selection: $selectedView) {
@@ -509,6 +514,8 @@ struct RecurringDetailSheet: View {
                     Text("Transazioni passate (\(linkedTransactions.count))")
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle(item.name)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -602,6 +609,8 @@ struct LinkTransactionSheet: View {
                 }
                 } // ForEach
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Collega a \(recurringName)")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

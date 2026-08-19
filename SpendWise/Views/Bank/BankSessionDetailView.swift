@@ -111,6 +111,8 @@ struct BankSessionDetailView: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .background(DS.Colors.bgApp)
         .navigationTitle(session.displayInstitutionName ?? "Banca")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

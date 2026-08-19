@@ -101,7 +101,7 @@ struct RecurringCalendarView: View {
                     LazyVGrid(columns: gridColumns, spacing: 4) {
                         ForEach(0..<paddedDays.count, id: \.self) { idx in
                             if let day = paddedDays[idx] {
-                                DayCell(
+                                CalendarDayCell(
                                     day: day,
                                     recurrings: recurrings(on: day),
                                     hasTransactions: !transactions(on: day).isEmpty,
@@ -119,7 +119,7 @@ struct RecurringCalendarView: View {
                     .padding(.bottom, 4)
                 }
                 .padding(.vertical, 4)
-                .background(.background)
+                .background(DS.Colors.surfaceCard)
 
                 Divider()
 
@@ -195,20 +195,23 @@ struct RecurringCalendarView: View {
                                 .padding(.bottom, 4)
 
                             ForEach(dayTransactions) { tx in
-                                HStack(spacing: 12) {
-                                    CategoryIconView(categoryName: tx.category, size: 32, showBackground: false)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(tx.description.isEmpty ? tx.category : tx.description)
-                                            .font(.subheadline).lineLimit(1)
-                                        Text(tx.category).font(.caption2).foregroundStyle(.secondary)
+                                NavigationLink(value: tx) {
+                                    HStack(spacing: 12) {
+                                        CategoryIconView(categoryName: tx.category, size: 32, showBackground: false)
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(tx.description.isEmpty ? tx.category : tx.description)
+                                                .font(.subheadline).lineLimit(1)
+                                            Text(tx.category).font(.caption2).foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        Text((tx.type == .expense ? "-" : "+") + tx.amount.euroFormatted)
+                                            .font(.subheadline.bold())
+                                            .foregroundStyle(tx.type == .expense ? Color.expense : Color.income)
                                     }
-                                    Spacer()
-                                    Text((tx.type == .expense ? "-" : "+") + tx.amount.euroFormatted)
-                                        .font(.subheadline.bold())
-                                        .foregroundStyle(tx.type == .expense ? Color.expense : Color.income)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 6)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 6)
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -217,11 +220,11 @@ struct RecurringCalendarView: View {
                 .padding(.bottom, 16)
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(DS.Colors.bgApp)
     }
 }
 
-private struct DayCell: View {
+struct CalendarDayCell: View {
     let day: Date
     let recurrings: [RecurringPayment]
     let hasTransactions: Bool

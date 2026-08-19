@@ -124,25 +124,48 @@ struct BilanceImportView: View {
                             .foregroundStyle(.red)
                     }
 
-                    Button {
-                        showFilePicker = true
-                    } label: {
-                        HStack {
-                            Spacer()
-                            if isImporting {
-                                ProgressView()
-                                    .padding(.trailing, 4)
-                                Text("Importazione...")
-                            } else {
-                                Label("Seleziona file CSV", systemImage: "doc.text.badge.plus")
-                                    .font(.subheadline.bold())
+                    if #available(iOS 26.0, *) {
+                        Button {
+                            showFilePicker = true
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if isImporting {
+                                    ProgressView()
+                                        .padding(.trailing, 4)
+                                    Text("Importazione...")
+                                } else {
+                                    Label("Seleziona file CSV", systemImage: "doc.text.badge.plus")
+                                        .font(.subheadline.bold())
+                                }
+                                Spacer()
                             }
-                            Spacer()
+                            .padding(.vertical, 4)
                         }
-                        .padding(.vertical, 4)
+                        .buttonStyle(.glassProminent)
+                        .disabled(isImporting || viewModel.userId == nil)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isImporting || viewModel.userId == nil)
+                    else{
+                        Button {
+                            showFilePicker = true
+                        } label: {
+                            HStack {
+                                Spacer()
+                                if isImporting {
+                                    ProgressView()
+                                        .padding(.trailing, 4)
+                                    Text("Importazione...")
+                                } else {
+                                    Label("Seleziona file CSV", systemImage: "doc.text.badge.plus")
+                                        .font(.subheadline.bold())
+                                }
+                                Spacer()
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isImporting || viewModel.userId == nil)
+                    }
                 }
 
                 // ── Preview ───────────────────────────────────────────
@@ -213,6 +236,8 @@ struct BilanceImportView: View {
                 }
             }
             .interactiveDismissDisabled(isImporting)
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Importa da Bilance")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

@@ -96,6 +96,8 @@ struct AccountSettingsEditView: View {
                         .font(.caption2)
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(DS.Colors.bgApp)
             .navigationTitle("Impostazioni conto")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
