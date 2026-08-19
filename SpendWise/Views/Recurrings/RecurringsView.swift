@@ -86,6 +86,9 @@ struct RecurringsView: View {
             .scrollContentBackground(.hidden)
             .background(DS.Colors.bgApp)
             .navigationTitle("Abbonamenti")
+            .navigationDestination(for: Transaction.self) { tx in
+                TransactionDetailView(transaction: tx, viewModel: viewModel)
+            }
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Picker("Vista", selection: $selectedView) {

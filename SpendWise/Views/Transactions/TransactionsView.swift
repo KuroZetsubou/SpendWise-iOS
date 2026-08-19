@@ -1,7 +1,13 @@
 import SwiftUI
 
 struct TransactionsView: View {
+    enum TxViewMode: String, CaseIterable {
+        case list = "Lista"
+        case calendar = "Calendario"
+    }
+
     @ObservedObject var viewModel: DashboardViewModel
+    @State private var txViewMode: TxViewMode = .list
     @State private var searchText = ""
     @State private var selectedTypeFilter: Transaction.TransactionType? = nil
     @State private var selectedCategoryFilter: String? = nil
@@ -77,10 +83,7 @@ struct TransactionsView: View {
                     Text(tx.displayTitle)
                 }
             }
-            .alert("Errore", isPresented: .init(
-                get: { viewModel.errorMessage != nil },
-                set: { if !$0 { viewModel.dismissError() } }
-            )) {
+            .alert("Errore", isPresented: errorBinding) {
                 Button("OK") { viewModel.dismissError() }
             } message: {
                 Text(viewModel.errorMessage ?? "")
