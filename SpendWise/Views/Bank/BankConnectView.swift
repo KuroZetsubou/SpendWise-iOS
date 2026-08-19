@@ -15,6 +15,7 @@ struct BankConnectView: View {
     @State private var syncDays = 30
     @State private var showTRImport = false
     @State private var showTRCountryPicker = false
+    @State private var heroHeight: CGFloat = 280
 
     // Countries where Trade Republic holds a banking licence and is reachable via Enable Banking
     private let trCountries: [(code: String, flag: String, name: String)] = [
@@ -54,6 +55,7 @@ struct BankConnectView: View {
             ScrollView {
                 VStack(spacing: DS.Space.sectionGap) {
                     heroHeader
+                        .dsReportHeroHeight()
 
                     VStack(spacing: DS.Space.sectionGap) {
                         if !viewModel.bankSessions.isEmpty {
@@ -75,11 +77,12 @@ struct BankConnectView: View {
                     }
                     .dsGutter()
                 }
-                .padding(.bottom, DS.Space.x8)
+                .padding(.bottom, DS.Space.tabBarHeight + DS.Space.x8)
             }
             .scrollIndicators(.hidden)
-            .background(DS.Colors.bgApp)
+            .dsHeroScrollBackground(height: heroHeight)
             .ignoresSafeArea(edges: .top)
+            .onPreferenceChange(DSHeroHeightKey.self) { heroHeight = $0 }
             .navigationDestination(for: BankSession.self) { session in
                 BankSessionDetailView(session: session, viewModel: viewModel) {
                     Task { await reconnectSession(session) }

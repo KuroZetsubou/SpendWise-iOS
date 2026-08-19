@@ -9,6 +9,7 @@ struct DashboardView: View {
     @State private var balanceHidden = false
     @State private var chartIndex = 0
     @State private var chartMode: ChartMode = .expenses
+    @State private var heroHeight: CGFloat = 320
 
     private enum ChartMode: Hashable { case expenses, income }
 
@@ -17,6 +18,7 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: DS.Space.sectionGap) {
                     heroHeader
+                        .dsReportHeroHeight()
 
                     VStack(spacing: DS.Space.sectionGap) {
                         statsGrid
@@ -25,11 +27,12 @@ struct DashboardView: View {
                     }
                     .dsGutter()
                 }
-                .padding(.bottom, DS.Space.x8)
+                .padding(.bottom, DS.Space.tabBarHeight + DS.Space.x8)
             }
             .scrollIndicators(.hidden)
-            .background(DS.Colors.bgApp)
+            .dsHeroScrollBackground(height: heroHeight)
             .ignoresSafeArea(edges: .top)
+            .onPreferenceChange(DSHeroHeightKey.self) { heroHeight = $0 }
             .navigationDestination(for: Transaction.self) { tx in
                 TransactionDetailView(transaction: tx, viewModel: viewModel)
             }

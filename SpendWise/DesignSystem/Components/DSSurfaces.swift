@@ -175,6 +175,41 @@ public extension View {
     }
 }
 
+// MARK: - Hero scroll background
+//
+// The navy hero panel scrolls with the content. Without a pinned strip behind it, the
+// white screen background shows through under the status bar the moment the hero moves,
+// which reads as a jarring white gap. These helpers keep a fixed navy gradient behind the
+// top of a scrolling screen so the strip stays blue while the content scrolls under it.
+
+public struct DSHeroHeightKey: PreferenceKey {
+    public static var defaultValue: CGFloat = 0
+    public static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
+public extension View {
+    /// Records the natural height of the hero content for use with `dsHeroScrollBackground`.
+    func dsReportHeroHeight() -> some View {
+        background(
+            GeometryReader { geo in
+                Color.clear.preference(key: DSHeroHeightKey.self, value: geo.size.height)
+            }
+        )
+    }
+
+    /// Pins the navy hero gradient behind the top of a scrolling screen. Apply to the
+    /// `ScrollView` after `.dsReportHeroHeight()` on the hero and keep `.ignoresSafeArea(.top)`.
+    func dsHeroScrollBackground(height: CGFloat) -> some View {
+        background(DS.Colors.bgApp)
+            .background(alignment: .top) {
+                DS.Gradients.hero
+                    .frame(height: max(height, 0))
+            }
+    }
+}
+
 // MARK: - Empty state
 //
 // Short and factual, per the kit's empty/aside copy rule.

@@ -5,6 +5,7 @@ struct InsightsView: View {
     @State private var showError = false
     @State private var insightsMonthOffset: Int = 0
     @State private var selectedCategoryDrilldown: CategoryBreakdown? = nil
+    @State private var heroHeight: CGFloat = 320
 
     private var canGoBack: Bool { insightsMonthOffset > -24 }
     private var canGoForward: Bool { insightsMonthOffset < 0 }
@@ -29,6 +30,7 @@ struct InsightsView: View {
             ScrollView {
                 VStack(spacing: DS.Space.sectionGap) {
                     heroHeader
+                        .dsReportHeroHeight()
 
                     VStack(spacing: DS.Space.sectionGap) {
                         savingsSummary
@@ -39,11 +41,12 @@ struct InsightsView: View {
                     }
                     .dsGutter()
                 }
-                .padding(.bottom, DS.Space.x8)
+                .padding(.bottom, DS.Space.tabBarHeight + DS.Space.x8)
             }
             .scrollIndicators(.hidden)
-            .background(DS.Colors.bgApp)
+            .dsHeroScrollBackground(height: heroHeight)
             .ignoresSafeArea(edges: .top)
+            .onPreferenceChange(DSHeroHeightKey.self) { heroHeight = $0 }
             .onChange(of: viewModel.errorMessage) { _, msg in showError = msg != nil }
             .alert("Errore", isPresented: $showError) {
                 Button("OK") { viewModel.dismissError() }

@@ -16,12 +16,14 @@ struct SettingsView: View {
     @State private var alertMessage: String?
     @State private var showAlert = false
     @State private var showAnonLogoutConfirm = false
+    @State private var heroHeight: CGFloat = 320
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: DS.Space.sectionGap) {
                     profileHeader
+                        .dsReportHeroHeight()
 
                     VStack(spacing: DS.Space.sectionGap) {
                         if authViewModel.isAnonymous { linkAccountBanner }
@@ -33,11 +35,12 @@ struct SettingsView: View {
                     }
                     .dsGutter()
                 }
-                .padding(.bottom, DS.Space.x8)
+                .padding(.bottom, DS.Space.tabBarHeight + DS.Space.x8)
             }
             .scrollIndicators(.hidden)
-            .background(DS.Colors.bgApp)
+            .dsHeroScrollBackground(height: heroHeight)
             .ignoresSafeArea(edges: .top)
+            .onPreferenceChange(DSHeroHeightKey.self) { heroHeight = $0 }
             .sheet(isPresented: $showCategoryManager) {
                 CategoryManagerView(viewModel: viewModel)
             }

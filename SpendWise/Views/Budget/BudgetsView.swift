@@ -6,6 +6,7 @@ struct BudgetsView: View {
     @State private var itemToEdit: Budget?
     @State private var itemToDelete: Budget?
     @State private var showDeleteConfirm = false
+    @State private var heroHeight: CGFloat = 340
 
     // Current month spending per category (excluding ignored/transfer)
     private var monthlySpending: [String: Double] {
@@ -26,6 +27,7 @@ struct BudgetsView: View {
         ScrollView {
             VStack(spacing: DS.Space.sectionGap) {
                 heroHeader
+                    .dsReportHeroHeight()
 
                 VStack(spacing: DS.Space.sectionGap) {
                     if viewModel.budgets.isEmpty {
@@ -42,11 +44,12 @@ struct BudgetsView: View {
                 }
                 .dsGutter()
             }
-            .padding(.bottom, DS.Space.x12)
+            .padding(.bottom, DS.Space.x12 + DS.Space.x8)
         }
         .scrollIndicators(.hidden)
-        .background(DS.Colors.bgApp)
+        .dsHeroScrollBackground(height: heroHeight)
         .ignoresSafeArea(edges: .top)
+        .onPreferenceChange(DSHeroHeightKey.self) { heroHeight = $0 }
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
