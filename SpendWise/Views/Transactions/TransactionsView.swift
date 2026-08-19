@@ -91,6 +91,13 @@ struct TransactionsView: View {
         }
     }
 
+    private var errorBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.errorMessage != nil },
+            set: { if !$0 { viewModel.dismissError() } }
+        )
+    }
+
     // MARK: - Header
     //
     // Light app bar: ink title left, a white circular overflow button on the right, then the
